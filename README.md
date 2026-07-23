@@ -20,6 +20,8 @@ cascade impact \
 
 Prints a JSON ImpactReport with blast radius, severity, and ML retrain suggestions.
 
+`--diff` accepts a JSON changes file or a unified diff (`.patch` / `.sql.diff`). Diff content is auto-detected — JSON files start with `{` or `[`, everything else is parsed as a diff.
+
 ### Data sources
 
 | Flag | Behavior |

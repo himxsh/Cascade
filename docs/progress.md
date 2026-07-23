@@ -1,8 +1,8 @@
 # Cascade — Progress
 
 **Last updated:** 2026-07-24  
-**Current phase:** Phase 1 — Read path (live DataHub read client + fixture hybrid)  
-**Overall:** ~40%
+**Current phase:** Phase 2 — Reason + generate path  
+**Overall:** ~45%
 
 ---
 
@@ -47,14 +47,14 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Diff / change classifier (rename heuristic-first) | [ ] | |
+| Diff / change classifier (rename heuristic-first) | [x] | `cascade/diff_parser.py` — parse_unified_diff → FIELD_RENAMED / FIELD_REMOVED. Annotation (`cascade: rename a -> b`) confirms/overrides. Heuristic: one-removed + one-added in same file → rename. Stdlib only (re). `load_changes()` dispatches JSON or diff by content. 12 tests. |
 | **Agentic strategy selection + rationale** (LLM) | [ ] | The "it's an agent" bit |
 | **Primary generator: `rewrite` downstream SQL** | [ ] | Headline artifact, not shim-only |
 | Fallbacks: `adapter_view` / `deprecate` | [ ] | |
 | Schema gate (no invented columns) | [ ] | Hard fail |
 | Thin ML: mark `mlModel` retrain-suggested | [ ] | feature→model edge |
 | Golden-diff eval in CI | [ ] | Proves end-to-end |
-| `examples/` incl. headline rewritten PR diff | [ ] | |
+| `examples/` incl. headline rewritten PR diff | [ ] | Sample input diffs landed under `examples/diffs/`; rewritten PR headline still Phase 2 |
 
 ## Phase 3 — Act + write-back
 
@@ -173,3 +173,17 @@ _None yet._
 - `tests/test_datahub_live.py` — 21 mocked tests: GraphQL, health check, dataset parsing, lineage, BFS, hybrid ML, auto fallback
 - All 6 existing fixture tests still pass
 - Updated README with `--source` docs; updated progress.md + decisions log
+
+### 2026-07-24 (Phase 2 Checkpoint 1 — diff parser)
+
+- `cascade/diff_parser.py` — `parse_diff(text)` parses unified diffs into change objects:
+  - Annotation `cascade: rename a -> b` (SQL `--` or Python `#` style) → FIELD_RENAMED with `detected_by: "annotation"`, overrides/confirms heuristic
+  - Heuristic: if exactly one column removed and one added in the same file → FIELD_RENAMED (detected_by: "heuristic")
+  - Removed columns with no added counterpart → FIELD_REMOVED
+  - `load_changes(path)` auto-detects JSON vs diff by content; backward-compatible with existing JSON samples
+  - Stdlib only; SQL keywords filtered out; no SQL parser dependency
+- `cascade/cli.py` — `--diff` now accepts `.json`, `.patch`, `.sql.diff` files interchangeably
+- `examples/diffs/raw_orders_rename_user_id.patch` — sample unified diff with `-- cascade:` annotation
+- `tests/test_diff_parser.py` — 12 tests covering annotation (both comment styles), heuristic rename, field removed, multi-file, SQL keyword filtering, JSON dispatcher
+- All 27 existing tests still pass
+- Updated progress.md: Phase 2 started, diff classifier done, overall ~45%

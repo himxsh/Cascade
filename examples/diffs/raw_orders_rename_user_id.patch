@@ -1,0 +1,13 @@
+diff --git a/models/stg_orders.sql b/models/stg_orders.sql
+index abc123..def456 100644
+--- a/models/stg_orders.sql
++++ b/models/stg_orders.sql
+@@ -1,6 +1,7 @@
++-- cascade: rename user_id -> customer_id
+ SELECT
+     id,
+-    user_id,
++    customer_id,
+     amount,
+     status,
+     created_at
