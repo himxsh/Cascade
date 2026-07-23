@@ -1,8 +1,12 @@
+import contextlib
+import io
 import json
+import shutil
 import unittest
 from pathlib import Path
 
 from cascade.agent import choose_and_rewrite
+from cascade.cli import cmd_generate
 from cascade.datahub_fixture import load_catalog
 from cascade.rewrite import rename_column
 from cascade.schema_gate import validate_sql
@@ -123,12 +127,9 @@ class TestGenerateCLI(unittest.TestCase):
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
 
     def tearDown(self):
-        import shutil
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_generate_writes_file(self):
-        from cascade.cli import cmd_generate
-
         report_data = {
             "source_urn": RAW_URN,
             "changes": [
@@ -149,7 +150,9 @@ class TestGenerateCLI(unittest.TestCase):
             "fixture": str(FIXTURE),
             "func": cmd_generate,
         })()
-        cmd_generate(args)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cmd_generate(args)
         self.assertTrue((out_dir / "fct_orders.sql").exists())
         self.assertTrue((out_dir / "impact_report.json").exists())
         rewritten = (out_dir / "fct_orders.sql").read_text()
