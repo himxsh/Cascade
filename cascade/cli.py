@@ -6,13 +6,12 @@ import sys
 
 from cascade.datahub_live import resolve_catalog
 from cascade.impact import build_impact_report
+from cascade.diff_parser import load_changes
 
 
 def cmd_impact(args: argparse.Namespace) -> None:
 
-    with open(args.diff) as f:
-        diff_data = json.load(f)
-    changes = diff_data if isinstance(diff_data, list) else diff_data.get("changes", [])
+    changes = load_changes(args.diff)
 
     catalog = resolve_catalog(args.source, args.urn, args.fixture)
     report = build_impact_report(

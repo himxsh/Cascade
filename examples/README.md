@@ -1,9 +1,8 @@
 # Examples
 
-This directory will contain sample Cascade artifacts:
+## `diffs/`
 
-- **Headline rewritten PR diff** — the rewritten downstream dbt model SQL a data team would merge
-- **ImpactReport samples** — JSON outputs from `cascade impact`
-- **Seed scenario** — the demo dataset's schema before/after
+- `raw_orders_rename_user_id.json` — JSON changes file (FIELD_RENAMED, heuristic)
+- `raw_orders_rename_user_id.patch` — Unified diff with `-- cascade:` annotation, equivalent change
 
-Populated in later phases.
+Both produce the same ImpactReport via `cascade impact --diff`.
