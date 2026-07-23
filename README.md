@@ -20,6 +20,16 @@ cascade impact \
 
 Prints a JSON ImpactReport with blast radius, severity, and ML retrain suggestions.
 
+### Data sources
+
+| Flag | Behavior |
+|------|----------|
+| `--source fixture` (default) | Reads from the demo fixture |
+| `--source live` | Reads from live DataHub GMS (`DATAHUB_GMS_URL`); fails if unhealthy |
+| `--source auto` | Tries live GMS first; falls back to fixture with a stderr notice |
+
+Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/models fall back to fixture. Set `DATAHUB_GMS_URL` and `DATAHUB_TOKEN` (optional) in the environment or `.env`.
+
 ## Setup
 
 1. Clone the repo

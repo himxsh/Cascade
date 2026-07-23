@@ -1,8 +1,8 @@
 # Cascade — Progress
 
-**Last updated:** 2026-07-23  
-**Current phase:** Phase 1 — Read path (fixture-backed impact CLI checkpoint)  
-**Overall:** ~35%
+**Last updated:** 2026-07-24  
+**Current phase:** Phase 1 — Read path (live DataHub read client + fixture hybrid)  
+**Overall:** ~40%
 
 ---
 
@@ -35,7 +35,7 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| MCP / Agent Context Kit wiring | [~] | fixture first; live MCP next |
+| MCP / Agent Context Kit wiring | [x] | GraphQL GMS read client (MCP stand-in); full MCP in Phase 3 write-back |
 | `cascade impact` CLI | [x] | argparse subcommand, fixture-backed |
 | ImpactReport JSON dataclass + to_dict | [x] | `cascade/models.py` – stdlib dataclasses |
 | Fixture catalog (lineage BFS, schema, owners, ML impact) | [x] | `cascade/datahub_fixture.py` |
@@ -106,6 +106,9 @@ See [plan.md § Full plan](./plan.md). Do not start until Phase 4 demo is green.
 | 2026-07-23 | Thin ML edge + Skill PR + golden-diff eval moved **into MVP** | 3-category coverage, named OSS bonus, "actually works" score (review fix) |
 | 2026-07-23 | Reframe problem: *uncoordinated* not *silent* | Avoids occupied silent-failure lane; matches what MVP catches (review fix) |
 | 2026-07-23 | Phase 1 ships fixture-backed impact before live MCP | Spec decision #7 + demo resilience |
+| 2026-07-24 | GraphQL GMS read client via `urllib.request` (MCP stand-in) | Ponytail: stdlib HTTP, no new deps; swap to MCP SDK in Phase 3 write-back |
+| 2026-07-24 | Hybrid live-fixture catalog: live datasets/lineage/owners, fixture ML | MLBP aspects are inconsistently available via GMS GraphQL; documented in code |
+| 2026-07-24 | `--source fixture|live|auto` CLI flag | `auto` prints a stderr notice which backend was used |
 
 ---
 
@@ -154,3 +157,19 @@ _None yet._
 - `examples/diffs/raw_orders_rename_user_id.json` — sample FIELD_RENAMED change for demo scenario.
 - `tests/test_impact_fixture.py` — 6 test methods covering downstream BFS, owners, severity, ml_impact, JSON serialization.
 - No new deps. No live MCP client. No diff parser. No remediations/rewrite.
+
+### 2026-07-24 (Phase 1 Checkpoint 2 — live DataHub read client)
+
+- `cascade/datahub_live.py` — stdlib `urllib.request` GraphQL client against DataHub GMS:
+  - `health_check()` — GET `/health` (5s timeout)
+  - `_graphql()` — POST `/api/graphql` with optional Bearer token
+  - `fetch_dataset()` — schema fields + owners from GMS
+  - `fetch_downstream_lineage()` — one-hop lineage with pagination
+  - `load_catalog_live()` — BFS traversal from seed URN, builds same catalog shape as fixture
+  - Hybrid ML: live datasets/lineage/owners + fixture ML features/models (with graceful fallback)
+  - `resolve_catalog()` — `--source fixture|live|auto` dispatch, prints stderr notice for auto
+- `cascade/impact.py` — `build_impact_report` accepts optional preloaded `catalog` (backward compat)
+- `cascade/cli.py` — `--source` flag with choices fixture|live|auto (default fixture)
+- `tests/test_datahub_live.py` — 21 mocked tests: GraphQL, health check, dataset parsing, lineage, BFS, hybrid ML, auto fallback
+- All 6 existing fixture tests still pass
+- Updated README with `--source` docs; updated progress.md + decisions log
