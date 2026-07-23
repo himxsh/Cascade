@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-07-23  
 **Current phase:** Phase 0 — Scaffold  
-**Overall:** ~10%
+**Overall:** ~15%
 
 ---
 
@@ -28,7 +28,7 @@
 | Repo root + Apache 2.0 LICENSE | [x] | scaffold PR |
 | README skeleton | [x] | scaffold PR |
 | Project package layout (`cascade/`, `tests/`, `examples/`, `demo/`) | [x] | scaffold PR |
-| DataHub quickstart notes / compose | [ ] | |
+| DataHub quickstart notes / compose | [x] | demo/datahub-quickstart.md + health-check script |
 | Seed script for demo lineage | [ ] | |
 
 ## Phase 1 — Read path
@@ -124,3 +124,11 @@ _None yet._
 
 - Phase 0 scaffold checkpoint: LICENSE, README, package layout, pyproject.toml, .env.example, cascade/ package stub, tests/ version check, examples/ + demo/ READMEs.
 - `pip install -e .` and console script `cascade` verified clean.
+
+### 2026-07-23 (night)
+
+- DataHub quickstart docs: `demo/datahub-quickstart.md` with prerequisites, install, run, health check, env mapping, offline/fixture note.
+- Added `demo/scripts/check_datahub.sh` — GMS health check script.
+- Wired README Setup with link to quickstart doc.
+- Updated progress.md with checkpoint status.
+- Next: seed script for demo lineage graph.

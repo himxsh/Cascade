@@ -17,7 +17,8 @@ _Coming soon._
 
 1. Clone the repo
 2. Copy `.env.example` → `.env` and fill in credentials
-3. _(more coming soon)_
+3. **DataHub (local):** see [`demo/datahub-quickstart.md`](demo/datahub-quickstart.md) to stand up a local DataHub instance
+4. _(more coming soon)_
 
 ## Architecture
 
