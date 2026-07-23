@@ -1,0 +1,10 @@
+{
+  "changes": [
+    {
+      "type": "FIELD_RENAMED",
+      "from": "user_id",
+      "to": "customer_id",
+      "detected_by": "heuristic"
+    }
+  ]
+}
