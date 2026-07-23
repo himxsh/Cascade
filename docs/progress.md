@@ -48,13 +48,13 @@
 | Item | Status | Notes |
 |------|--------|-------|
 | Diff / change classifier (rename heuristic-first) | [x] | `cascade/diff_parser.py` — parse_unified_diff → FIELD_RENAMED / FIELD_REMOVED. Annotation (`cascade: rename a -> b`) confirms/overrides. Heuristic: one-removed + one-added in same file → rename. Stdlib only (re). `load_changes()` dispatches JSON or diff by content. 12 tests. |
-| **Agentic strategy selection + rationale** (LLM) | [ ] | The "it's an agent" bit |
-| **Primary generator: `rewrite` downstream SQL** | [ ] | Headline artifact, not shim-only |
-| Fallbacks: `adapter_view` / `deprecate` | [ ] | |
-| Schema gate (no invented columns) | [ ] | Hard fail |
-| Thin ML: mark `mlModel` retrain-suggested | [ ] | feature→model edge |
-| Golden-diff eval in CI | [ ] | Proves end-to-end |
-| `examples/` incl. headline rewritten PR diff | [ ] | Sample input diffs landed under `examples/diffs/`; rewritten PR headline still Phase 2 |
+| **Agentic strategy selection + rationale** | [x] | `cascade/agent.py` — choose_and_rewrite with demo agent (deterministic) + optional LLM via stdlib urllib |
+| **Primary generator: `rewrite` downstream SQL** | [x] | `cascade/rewrite.py` — deterministic word-boundary column rename |
+| Fallbacks: `adapter_view` / `deprecate` | [x] | Demo agent selects adapter_view when no SQL file, deprecate when FIELD_REMOVED |
+| Schema gate (no invented columns) | [x] | `cascade/schema_gate.py` — naive identifier scanner; rejects unknown identifiers, table aliases + qualified refs pass through |
+| Thin ML: mark `mlModel` retrain-suggested | [x] | Already in impact from Phase 1 — `get_ml_impact()` via feature→model edge |
+| Golden-diff eval in CI | [ ] | Deferred to Phase 2 Checkpoint 3 |
+| `examples/` incl. headline rewritten PR diff | [~] | Source model + generate path land; static headline PR diff artifact in CP3 |
 
 ## Phase 3 — Act + write-back
 
