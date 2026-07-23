@@ -11,7 +11,14 @@ An agent that turns a breaking schema PR into a coordinated migration — it rea
 
 ## Quick start
 
-_Coming soon._
+```bash
+pip install -e .
+cascade impact \
+  --urn 'urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)' \
+  --diff examples/diffs/raw_orders_rename_user_id.json
+```
+
+Prints a JSON ImpactReport with blast radius, severity, and ML retrain suggestions.
 
 ## Setup
 

@@ -1,8 +1,8 @@
 # Cascade — Progress
 
 **Last updated:** 2026-07-23  
-**Current phase:** Phase 0 — Scaffold (complete, pending live DataHub verify)  
-**Overall:** ~20%
+**Current phase:** Phase 1 — Read path (fixture-backed impact CLI checkpoint)  
+**Overall:** ~35%
 
 ---
 
@@ -35,10 +35,13 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| MCP / Agent Context Kit wiring | [ ] | |
-| `cascade impact` CLI | [ ] | |
-| ImpactReport JSON schema (incl. strategy + rationale + ml_impact) | [ ] | |
-| Self-check against seeded graph | [ ] | |
+| MCP / Agent Context Kit wiring | [~] | fixture first; live MCP next |
+| `cascade impact` CLI | [x] | argparse subcommand, fixture-backed |
+| ImpactReport JSON dataclass + to_dict | [x] | `cascade/models.py` – stdlib dataclasses |
+| Fixture catalog (lineage BFS, schema, owners, ML impact) | [x] | `cascade/datahub_fixture.py` |
+| `build_impact_report` with severity heuristic | [x] | `cascade/impact.py` |
+| Self-check against seeded graph | [x] | `tests/test_impact_fixture.py` (stdlib unittest) |
+| Sample diff (raw_orders rename user_id) | [x] | `examples/diffs/raw_orders_rename_user_id.json` |
 
 ## Phase 2 — Reason + generate path
 
@@ -102,6 +105,7 @@ See [plan.md § Full plan](./plan.md). Do not start until Phase 4 demo is green.
 | 2026-07-23 | Rename detection heuristic-first, annotation confirms | Demo shows agent reasoning, not a required hint (review fix) |
 | 2026-07-23 | Thin ML edge + Skill PR + golden-diff eval moved **into MVP** | 3-category coverage, named OSS bonus, "actually works" score (review fix) |
 | 2026-07-23 | Reframe problem: *uncoordinated* not *silent* | Avoids occupied silent-failure lane; matches what MVP catches (review fix) |
+| 2026-07-23 | Phase 1 ships fixture-backed impact before live MCP | Spec decision #7 + demo resilience |
 
 ---
 
@@ -140,3 +144,13 @@ _None yet._
 - Created `demo/check_demo_graph.py` — validates fixture without live DataHub: checks URNs, lineage path, ML edge, `user_id` fields, owners. Exits 0 on pass.
 - Created `demo/requirements.txt` — `acryl-datahub` (demo tooling, not cascade hard dep).
 - Updated progress.md: Overall ~20%, Phase 0 scaffold items all [x], noted pending live DataHub verify.
+
+### 2026-07-23 (Phase 1 checkpoint — fixture-backed impact CLI)
+
+- `cascade/models.py` — ImpactReport + Change + DownstreamNode + MLImpact + Remediation dataclasses, `to_dict()`.
+- `cascade/datahub_fixture.py` — fixture loader (demo_graph.json), BFS downstream lineage, schema field lookup, owner lookup, ML impact (feature→model retrain-suggested).
+- `cascade/impact.py` — `build_impact_report()` with simple severity heuristic: high if breaking change + downstream exists.
+- `cascade/cli.py` — `cascade impact --urn --diff [--fixture]` subcommand, prints JSON report to stdout.
+- `examples/diffs/raw_orders_rename_user_id.json` — sample FIELD_RENAMED change for demo scenario.
+- `tests/test_impact_fixture.py` — 6 test methods covering downstream BFS, owners, severity, ml_impact, JSON serialization.
+- No new deps. No live MCP client. No diff parser. No remediations/rewrite.
