@@ -1,8 +1,8 @@
 # Cascade — Progress
 
 **Last updated:** 2026-07-23  
-**Current phase:** Phase 0 — Scaffold  
-**Overall:** ~15%
+**Current phase:** Phase 0 — Scaffold (complete, pending live DataHub verify)  
+**Overall:** ~20%
 
 ---
 
@@ -29,7 +29,7 @@
 | README skeleton | [x] | scaffold PR |
 | Project package layout (`cascade/`, `tests/`, `examples/`, `demo/`) | [x] | scaffold PR |
 | DataHub quickstart notes / compose | [x] | demo/datahub-quickstart.md + health-check script |
-| Seed script for demo lineage | [ ] | |
+| Seed script for demo lineage | [x] | `demo/fixtures/demo_graph.json` + `demo/seed_demo_graph.py` + `demo/check_demo_graph.py` |
 
 ## Phase 1 — Read path
 
@@ -132,3 +132,11 @@ _None yet._
 - Wired README Setup with link to quickstart doc.
 - Updated progress.md with checkpoint status.
 - Next: seed script for demo lineage graph.
+
+### 2026-07-23 (seed checkpoint)
+
+- Created `demo/fixtures/demo_graph.json` — 4 datasets (raw/stg/fct/features), 3 lineage edges, 1 ML feature, 1 ML model, owners (alice/bob), schema fields including `user_id` on raw + fct.
+- Created `demo/seed_demo_graph.py` — reads fixture, builds MCPs for datasets (properties + schema + ownership + upstreamLineage), ML features, and ML models. Dry-run by default, `--apply` emits via `DatahubRestEmitter`.
+- Created `demo/check_demo_graph.py` — validates fixture without live DataHub: checks URNs, lineage path, ML edge, `user_id` fields, owners. Exits 0 on pass.
+- Created `demo/requirements.txt` — `acryl-datahub` (demo tooling, not cascade hard dep).
+- Updated progress.md: Overall ~20%, Phase 0 scaffold items all [x], noted pending live DataHub verify.

@@ -1,0 +1,81 @@
+{
+  "version": "1.0",
+  "description": "Demo lineage graph for Cascade — Phase 0 seed. Matches docs/spec.md §9.",
+  "datasets": [
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+      "platform": "snowflake",
+      "name": "analytics.raw_orders",
+      "env": "PROD",
+      "description": "Raw orders table — rename target (user_id → customer_id in demo scenario)",
+      "schema_fields": [
+        {"name": "order_id", "type": "int"},
+        {"name": "user_id", "type": "int"},
+        {"name": "amount", "type": "float"}
+      ],
+      "owners": ["urn:li:corpuser:alice"]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)",
+      "platform": "snowflake",
+      "name": "analytics.stg_orders",
+      "env": "PROD",
+      "description": "dbt staging model for orders",
+      "schema_fields": [
+        {"name": "order_id", "type": "int"},
+        {"name": "user_id", "type": "int"},
+        {"name": "amount", "type": "float"}
+      ],
+      "owners": ["urn:li:corpuser:alice"]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)",
+      "platform": "snowflake",
+      "name": "analytics.fct_orders",
+      "env": "PROD",
+      "description": "dbt fact/mart table — projects and joins on user_id (rewrite target)",
+      "schema_fields": [
+        {"name": "order_id", "type": "int"},
+        {"name": "user_id", "type": "int"},
+        {"name": "amount", "type": "float"}
+      ],
+      "owners": ["urn:li:corpuser:alice"]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)",
+      "platform": "snowflake",
+      "name": "analytics.features_orders",
+      "env": "PROD",
+      "description": "Feature table for churn prediction — feeds mlFeature(user_id)",
+      "schema_fields": [
+        {"name": "user_id", "type": "int"},
+        {"name": "order_count", "type": "int"},
+        {"name": "total_amount", "type": "float"}
+      ],
+      "owners": ["urn:li:corpuser:bob"]
+    }
+  ],
+  "lineage": [
+    {"source": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)", "target": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)"},
+    {"source": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)", "target": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)"},
+    {"source": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)", "target": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)"}
+  ],
+  "mlFeatures": [
+    {
+      "urn": "urn:li:mlFeature:(analytics.features_orders,user_id)",
+      "name": "user_id",
+      "description": "User ID feature derived from orders feature table",
+      "sources": ["urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)"],
+      "owners": ["urn:li:corpuser:bob"]
+    }
+  ],
+  "mlModels": [
+    {
+      "urn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+      "name": "churn_predictor",
+      "description": "Churn prediction model — retrain when upstream schema changes (cascade:retrain-suggested)",
+      "features": ["urn:li:mlFeature:(analytics.features_orders,user_id)"],
+      "owners": ["urn:li:corpuser:bob"]
+    }
+  ]
+}
