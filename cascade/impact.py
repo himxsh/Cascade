@@ -10,8 +10,10 @@ def build_impact_report(
     source_urn: str,
     changes: list[dict[str, Any]],
     fixture_path: str | None = None,
+    catalog: dict[str, Any] | None = None,
 ) -> ImpactReport:
-    catalog = load_catalog(fixture_path)
+    if catalog is None:
+        catalog = load_catalog(fixture_path)
 
     changed_field_names = set()
     for c in changes:

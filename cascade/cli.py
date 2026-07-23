@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 
+from cascade.datahub_live import resolve_catalog
 from cascade.impact import build_impact_report
 
 
@@ -13,10 +14,11 @@ def cmd_impact(args: argparse.Namespace) -> None:
         diff_data = json.load(f)
     changes = diff_data if isinstance(diff_data, list) else diff_data.get("changes", [])
 
+    catalog = resolve_catalog(args.source, args.urn, args.fixture)
     report = build_impact_report(
         source_urn=args.urn,
         changes=changes,
-        fixture_path=args.fixture,
+        catalog=catalog,
     )
     json.dump(report.to_dict(), sys.stdout, indent=2)
     sys.stdout.write("\n")
@@ -31,6 +33,12 @@ def main() -> None:
     impact_p.add_argument("--urn", required=True, help="Source dataset URN")
     impact_p.add_argument("--diff", required=True, help="Path to JSON changes file")
     impact_p.add_argument("--fixture", help="Override fixture path")
+    impact_p.add_argument(
+        "--source",
+        choices=["fixture", "live", "auto"],
+        default="fixture",
+        help="Data source: fixture (default), live (GMS, fail if down), auto (prefer live, fallback fixture)",
+    )
     impact_p.set_defaults(func=cmd_impact)
 
     args = parser.parse_args()
