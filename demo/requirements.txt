@@ -1,0 +1,4 @@
+# Demo tooling — NOT a hard dependency of the cascade package.
+# Install before running seed_demo_graph.py:
+#   pip install -r demo/requirements.txt
+acryl-datahub

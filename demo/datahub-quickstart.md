@@ -75,9 +75,17 @@ DATAHUB_TOKEN=
 
 `DATAHUB_TOKEN` can be empty for local quickstart (auth is disabled by default).
 
-> **Seed script note:** The demo lineage graph (upstream + 3-4 downstream entities)
-> is a separate checkpoint — not implemented here. See `docs/spec.md §9` for the graph
-> shape and `docs/progress.md` for current status.
+> **After quickstart: seed the demo graph**
+>
+> ```bash
+> pip install -r demo/requirements.txt
+> export DATAHUB_GMS_URL=http://localhost:8080
+> python demo/seed_demo_graph.py --apply
+> ```
+>
+> This emits 4 datasets (raw → stg → fct → features), 1 ML feature, 1 ML model,
+> and the lineage edges between them. Run `python demo/check_demo_graph.py` first
+> to validate the fixture without a live DataHub instance.
 
 ## Offline / fixture path
 
