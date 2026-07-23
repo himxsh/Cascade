@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cascade"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "An agent that turns a breaking schema PR into a coordinated migration"
+license = { text = "Apache-2.0" }
+
+[tool.setuptools]
+packages = ["cascade"]
+
+[project.scripts]
+cascade = "cascade.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest"]

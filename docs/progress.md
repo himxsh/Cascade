@@ -1,8 +1,8 @@
 # Cascade — Progress
 
 **Last updated:** 2026-07-23  
-**Current phase:** Phase 0 — Scaffold (docs only)  
-**Overall:** 5%
+**Current phase:** Phase 0 — Scaffold  
+**Overall:** ~10%
 
 ---
 
@@ -25,9 +25,9 @@
 | `docs/spec.md` | [x] | Initial spec |
 | `docs/progress.md` | [x] | This file |
 | `docs/architecture.drawio` | [x] | Initial architecture |
-| Repo root + Apache 2.0 LICENSE | [ ] | |
-| README skeleton | [ ] | |
-| Project package layout (`cascade/`, `tests/`, `examples/`, `demo/`) | [ ] | |
+| Repo root + Apache 2.0 LICENSE | [x] | scaffold PR |
+| README skeleton | [x] | scaffold PR |
+| Project package layout (`cascade/`, `tests/`, `examples/`, `demo/`) | [x] | scaffold PR |
 | DataHub quickstart notes / compose | [ ] | |
 | Seed script for demo lineage | [ ] | |
 
@@ -119,3 +119,8 @@ _None yet._
 - Created `Cascade/docs` with plan, spec, progress, architecture.
 - Ran a grand-prize gap review; applied 4 fixes to plan + spec: (1) rewrite-first codegen, (2) visible agentic reasoning, (3) thin ML + eval + Skill PR into MVP, (4) reframed "silent" → "uncoordinated".
 - Next: scaffold repo + seed DataHub graph (now incl. a feature→model edge).
+
+### 2026-07-23 (late)
+
+- Phase 0 scaffold checkpoint: LICENSE, README, package layout, pyproject.toml, .env.example, cascade/ package stub, tests/ version check, examples/ + demo/ READMEs.
+- `pip install -e .` and console script `cascade` verified clean.
