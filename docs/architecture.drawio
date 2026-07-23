@@ -1,0 +1,166 @@
+<mxfile host="app.diagrams.net" agent="Cascade" version="24.7.17">
+  <diagram id="cascade-architecture" name="Cascade Architecture">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1120" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Cascade — Architecture (DataHub Agent Hackathon)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="640" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Breaking schema PR → DataHub context → LLM reasons per node → rewrites downstream code → acts in GitHub → writes back (dataset + ML)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="48" width="960" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Swimlane: Triggers -->
+        <mxCell id="lane-trigger" value="Triggers" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;startSize=28;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="200" height="470" as="geometry" />
+        </mxCell>
+        <mxCell id="gha" value="GitHub Action&#xa;pull_request&#xa;(**/*.sql, **/models/**)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane-trigger">
+          <mxGeometry x="45" y="80" width="140" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="cli" value="CLI (local dry-run)&#xa;cascade impact&#xa;cascade generate&#xa;cascade demo" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane-trigger">
+          <mxGeometry x="45" y="250" width="140" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- Swimlane: Cascade Agent -->
+        <mxCell id="lane-agent" value="Cascade Agent" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;startSize=28;" vertex="1" parent="1">
+          <mxGeometry x="280" y="90" width="600" height="470" as="geometry" />
+        </mxCell>
+
+        <!-- Top row: flow left -> right -->
+        <mxCell id="diff" value="1. Diff / Change Classifier&#xa;remove · rename · type&#xa;(rename: heuristic-first,&#xa;annotation confirms)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane-agent">
+          <mxGeometry x="45" y="50" width="155" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="impact" value="2. Impact Analyzer (tools)&#xa;URN · lineage · owners&#xa;severity · ML feature→model" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane-agent">
+          <mxGeometry x="225" y="50" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="report" value="ImpactReport (JSON)&#xa;change · nodes · owners&#xa;severity · ml_impact&#xa;strategy + rationale" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#fff9e6;strokeColor=#d6b656;" vertex="1" parent="lane-agent">
+          <mxGeometry x="410" y="50" width="165" height="82" as="geometry" />
+        </mxCell>
+
+        <!-- Bottom row: flow right -> left -->
+        <mxCell id="reasoner" value="3. LLM Reasoner  ★ the agent&#xa;selects strategy per node&#xa;rewrite / adapter_view / deprecate&#xa;+ one-line rationale" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd966;strokeColor=#bf9000;fontStyle=1;strokeWidth=2;" vertex="1" parent="lane-agent">
+          <mxGeometry x="405" y="200" width="170" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="rewrite" value="4. Rewrite Generator&#xa;rewrites downstream dbt/SQL&#xa;(primary path)&#xa;schema-validation gate:&#xa;no column not in DataHub" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane-agent">
+          <mxGeometry x="215" y="200" width="170" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="fallback" value="fallback&#xa;adapter_view shim /&#xa;deprecate + fail-fast" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;dashed=1;fontSize=10;" vertex="1" parent="lane-agent">
+          <mxGeometry x="45" y="212" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Row 3: actor spans width -->
+        <mxCell id="actor" value="5. Actor (tools) — PR comment + rationale · downstream PR (rewritten files) · reviewers from owners · ML retrain tag" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane-agent">
+          <mxGeometry x="45" y="360" width="530" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Swimlane: DataHub -->
+        <mxCell id="lane-dh" value="DataHub Context Platform" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;startSize=28;" vertex="1" parent="1">
+          <mxGeometry x="920" y="90" width="300" height="470" as="geometry" />
+        </mxCell>
+        <mxCell id="mcp" value="MCP Server /&#xa;Agent Context Kit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="lane-dh">
+          <mxGeometry x="55" y="45" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="read" value="READ&#xa;search · get_entities&#xa;list_schema_fields (gate)&#xa;get_lineage (data + ML)&#xa;owners · tags" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9673a6;" vertex="1" parent="lane-dh">
+          <mxGeometry x="55" y="130" width="190" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="write" value="WRITE (contribute back)&#xa;save_document&#xa;add/remove_tags&#xa;(breaking-pending → migrated,&#xa;retrain-suggested)&#xa;update_description" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9673a6;" vertex="1" parent="lane-dh">
+          <mxGeometry x="55" y="265" width="190" height="115" as="geometry" />
+        </mxCell>
+
+        <!-- Swimlane: Outputs -->
+        <mxCell id="lane-out" value="Outputs (what judges see)" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;startSize=28;" vertex="1" parent="1">
+          <mxGeometry x="40" y="620" width="1180" height="175" as="geometry" />
+        </mxCell>
+        <mxCell id="out-comment" value="Source PR comment&#xa;blast radius + rationale" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane-out">
+          <mxGeometry x="25" y="60" width="170" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="out-pr" value="Downstream PR(s)&#xa;rewritten, mergeable dbt/SQL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane-out">
+          <mxGeometry x="215" y="60" width="175" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="out-examples" value="examples/&#xa;headline rewritten PR diff&#xa;(offline judging)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane-out">
+          <mxGeometry x="410" y="60" width="175" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="out-tags" value="DataHub write-back (dataset)&#xa;doc · tags · description" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane-out">
+          <mxGeometry x="605" y="60" width="185" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="out-ml" value="ML model write-back&#xa;retrain-suggested tag&#xa;+ incident doc on mlModel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane-out">
+          <mxGeometry x="810" y="60" width="185" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="out-seed" value="Seeded demo graph&#xa;raw → stg → mart&#xa;+ feature → mlModel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane-out">
+          <mxGeometry x="1015" y="60" width="150" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Edges: triggers → agent -->
+        <mxCell id="e1" value="PR event" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="gha" target="diff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;dashed=1;" edge="1" parent="1" source="cli" target="diff">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Top row flow (left → right) -->
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="diff" target="impact">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="impact" target="report">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Turn down + bottom row flow (right → left) -->
+        <mxCell id="e5" value="reason" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="report" target="reasoner">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="strategy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="reasoner" target="rewrite">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;dashed=1;fontSize=10;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="rewrite" target="fallback">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Down to actor -->
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="rewrite" target="actor">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Agent ↔ DataHub -->
+        <mxCell id="e9" value="context" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#9673a6;strokeWidth=2;fontColor=#9673a6;exitX=1;exitY=0.3;entryX=0;entryY=0.5;" edge="1" parent="1" source="impact" target="read">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" value="write-back" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#9673a6;strokeWidth=2;fontColor=#9673a6;dashed=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="actor" target="write">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#9673a6;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="mcp" target="read">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#9673a6;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="read" target="write">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Agent / DataHub → outputs -->
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="actor" target="out-comment">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="actor" target="out-pr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;" edge="1" parent="1" source="actor" target="out-examples">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="write" target="out-tags">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="write" target="out-ml">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend" value="Legend: solid = required MVP path · dashed = CLI/local, fallback, or write-back lifecycle · ★ yellow-bold = LLM reasoning (the agent) · orange = tools · purple = DataHub · green = artifacts judges see" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="810" width="1180" height="30" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
