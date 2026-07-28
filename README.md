@@ -39,6 +39,22 @@ python -m unittest tests.test_golden_diff -v
 
 Headline rewritten PR diff (no agent run needed): [`examples/rewritten/headline_pr.diff`](examples/rewritten/headline_pr.diff).
 
+### Fixture path: apply dry-run (Act + write-back)
+
+No GitHub or DataHub credentials required — artifacts land on disk:
+
+```bash
+cascade impact \
+  --urn 'urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)' \
+  --diff examples/diffs/raw_orders_rename_user_id.json \
+  --generate --models-dir examples/models --out /tmp/cascade-out
+
+cascade apply --report /tmp/cascade-out/impact_report.json --out /tmp/cascade-apply --mark-migrated
+# → pr_comment.md, rewritten/, datahub_writeback.json, ml_writeback.json, migrated.json
+```
+
+GitHub Action [`.github/workflows/cascade.yml`](.github/workflows/cascade.yml) runs the same fixture path and uploads artifacts. With `GITHUB_TOKEN` on a PR it posts the comment; DataHub live write-back stays off unless `CASCADE_WRITEBACK=1`.
+
 ### Data sources
 
 | Flag | Behavior |
@@ -52,9 +68,16 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 ## Setup
 
 1. Clone the repo
-2. Copy `.env.example` → `.env` and fill in credentials
+2. Copy `.env.example` → `.env` and fill in credentials (optional for fixture path)
 3. **DataHub (local):** see [`demo/datahub-quickstart.md`](demo/datahub-quickstart.md) to stand up a local DataHub instance
-4. _(more coming soon)_
+4. Env vars (see `.env.example`):
+
+| Variable | Required for | Notes |
+|----------|----------------|-------|
+| `DATAHUB_GMS_URL` / `DATAHUB_TOKEN` | `--source live` / live write-back | GMS GraphQL + optional Bearer |
+| `CASCADE_WRITEBACK=1` | Live DataHub/ML tags | Default is dry-run JSON artifacts |
+| `GITHUB_TOKEN` / `GITHUB_REPOSITORY` / `CASCADE_PR_NUMBER` | Live PR comment | Action sets these on `pull_request` |
+| `LLM_API_KEY` | Optional LLM rewrite | Demo agent used when unset |
 
 ## Architecture
 

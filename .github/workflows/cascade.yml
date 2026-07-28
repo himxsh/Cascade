@@ -1,0 +1,70 @@
+name: Cascade Act
+
+# Fixture/demo path: impact + generate + dry-run apply. Live comment/write-back
+# only when secrets/env are present (GITHUB_TOKEN, CASCADE_WRITEBACK, etc.).
+
+on:
+  pull_request:
+    paths:
+      - "**/*.sql"
+      - "**/models/**"
+      - "**/schema.yml"
+      - "examples/diffs/**"
+  workflow_dispatch:
+  push:
+    paths:
+      - "examples/diffs/**"
+      - "examples/models/**"
+      - "cascade/**"
+      - ".github/workflows/cascade.yml"
+
+jobs:
+  fixture-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e .
+      - name: Impact + generate (fixture)
+        env:
+          RAW_URN: "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)"
+        run: |
+          mkdir -p artifacts/generate
+          cascade impact \
+            --urn "$RAW_URN" \
+            --diff examples/diffs/raw_orders_rename_user_id.json \
+            --source fixture \
+            --generate --models-dir examples/models \
+            --out artifacts/generate > artifacts/impact_stdout.json
+      - name: Apply dry-run (comment + write-back artifacts)
+        env:
+          # Leave CASCADE_WRITEBACK unset → DataHub dry-run artifacts only
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CASCADE_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          cascade apply \
+            --report artifacts/generate/impact_report.json \
+            --out artifacts/apply \
+            --mark-migrated
+      - name: Upload Cascade artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cascade-artifacts
+          path: artifacts/
+      - name: Post PR comment when on a pull_request
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CASCADE_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from cascade.github_act import post_pr_comment
+          body = Path("artifacts/apply/pr_comment.md").read_text()
+          print(post_pr_comment(body))
+          PY
