@@ -8,7 +8,11 @@ from typing import Any
 
 from cascade.comment import build_pr_comment
 from cascade.datahub_write import mark_migrated, write_dataset_breaking, write_ml_retrain
-from cascade.github_act import open_or_update_downstream_pr, post_pr_comment
+from cascade.github_act import (
+    open_or_update_downstream_pr,
+    owner_urns_to_reviewers,
+    post_pr_comment,
+)
 
 
 def remediations_to_files(remediations: list[dict[str, Any]]) -> dict[str, str]:
@@ -19,6 +23,13 @@ def remediations_to_files(remediations: list[dict[str, Any]]) -> dict[str, str]:
         if sql and path:
             files[path] = sql
     return files
+
+
+def reviewers_from_report(report: dict[str, Any]) -> list[str]:
+    owners: list[str] = []
+    for node in report.get("downstream") or []:
+        owners.extend(node.get("owners") or [])
+    return owner_urns_to_reviewers(owners)
 
 
 def run_apply(
@@ -35,12 +46,13 @@ def run_apply(
     comment_result = post_pr_comment(comment, pr_number=pr_number, out_dir=out)
 
     files = remediations_to_files(report.get("remediations") or [])
-    pr_body = comment
+    reviewers = reviewers_from_report(report)
     downstream_result = open_or_update_downstream_pr(
         files,
         title="Cascade: remediate downstream schema break",
-        body=pr_body,
+        body=comment,
         out_dir=out,
+        reviewers=reviewers,
     )
 
     plan_doc = comment
