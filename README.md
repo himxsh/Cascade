@@ -9,10 +9,25 @@ An agent that turns a breaking schema PR into a coordinated migration — it rea
 | Agents That Do Real Work | Reasons over lineage, acts in GitHub, writes back to DataHub so the next agent inherits context |
 | Metadata-Aware Code Generation | Rewrites downstream dbt/SQL from live schemas (primary path), schema-gated |
 
-## Quick start
+## One-command demo (fixture path)
 
 ```bash
 pip install -e .
+cascade demo --out artifacts/demo
+```
+
+Runs impact → generate → apply dry-run with no secrets. Inspect:
+
+- `artifacts/demo/apply/pr_comment.md` — blast radius + agent rationale
+- `artifacts/demo/apply/downstream_pr.diff` — rewritten mergeable SQL patch
+- `artifacts/demo/apply/datahub_writeback.json` / `ml_writeback.json` — write-back payloads
+- `examples/rewritten/headline_pr.diff` — static headline artifact (no run needed)
+
+Full suite (includes golden-diff eval): `python -m unittest discover -s tests -v`
+
+## Quick start (stepwise)
+
+```bash
 cascade impact \
   --urn 'urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)' \
   --diff examples/diffs/raw_orders_rename_user_id.json
@@ -30,27 +45,14 @@ cascade impact \
   --diff examples/diffs/raw_orders_rename_user_id.json \
   --generate --models-dir examples/models --out /tmp/cascade-out
 
-# rewritten SQL must match the golden / headline artifact
 diff -u examples/rewritten/fct_orders.sql /tmp/cascade-out/fct_orders.sql
-
-# full golden-diff eval (also runs in CI)
 python -m unittest tests.test_golden_diff -v
 ```
 
-Headline rewritten PR diff (no agent run needed): [`examples/rewritten/headline_pr.diff`](examples/rewritten/headline_pr.diff).
-
 ### Fixture path: apply dry-run (Act + write-back)
 
-No GitHub or DataHub credentials required — artifacts land on disk:
-
 ```bash
-cascade impact \
-  --urn 'urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)' \
-  --diff examples/diffs/raw_orders_rename_user_id.json \
-  --generate --models-dir examples/models --out /tmp/cascade-out
-
 cascade apply --report /tmp/cascade-out/impact_report.json --out /tmp/cascade-apply --mark-migrated
-# → pr_comment.md, rewritten/, datahub_writeback.json, ml_writeback.json, migrated.json
 ```
 
 GitHub Action [`.github/workflows/cascade.yml`](.github/workflows/cascade.yml) runs the same fixture path and uploads artifacts. With `GITHUB_TOKEN` on a PR it posts the comment; DataHub live write-back stays off unless `CASCADE_WRITEBACK=1`.
@@ -80,9 +82,13 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 | `CASCADE_DOWNSTREAM_HEAD` / `CASCADE_DOWNSTREAM_BASE` | Live downstream PR | Head must already contain rewritten files |
 | `LLM_API_KEY` | Optional LLM rewrite | Demo agent used when unset |
 
+## Open-source Skill
+
+Draft DataHub Skill [`breaking-change-remediation`](oss/datahub-skills/skills/breaking-change-remediation/SKILL.md) (MVP named bonus) lives under [`oss/datahub-skills/`](oss/datahub-skills/). See that README for contributing upstream to [`datahub-project/datahub-skills`](https://github.com/datahub-project/datahub-skills).
+
 ## Architecture
 
-See [docs/](docs/) for spec, plan, and architecture diagrams.
+See [docs/](docs/) for [spec](docs/spec.md), [plan](docs/plan.md), [progress](docs/progress.md), and architecture diagrams.
 
 ## License
 
