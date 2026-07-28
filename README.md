@@ -77,6 +77,7 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 | `DATAHUB_GMS_URL` / `DATAHUB_TOKEN` | `--source live` / live write-back | GMS GraphQL + optional Bearer |
 | `CASCADE_WRITEBACK=1` | Live DataHub/ML tags | Default is dry-run JSON artifacts |
 | `GITHUB_TOKEN` / `GITHUB_REPOSITORY` / `CASCADE_PR_NUMBER` | Live PR comment | Action sets these on `pull_request` |
+| `CASCADE_DOWNSTREAM_HEAD` / `CASCADE_DOWNSTREAM_BASE` | Live downstream PR | Head must already contain rewritten files |
 | `LLM_API_KEY` | Optional LLM rewrite | Demo agent used when unset |
 
 ## Architecture

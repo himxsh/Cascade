@@ -1,8 +1,8 @@
 # Cascade — Progress
 
 **Last updated:** 2026-07-28  
-**Current phase:** Phase 3 — Act + write-back (dry-run scaffolding)  
-**Overall:** ~70%
+**Current phase:** Phase 3 complete → Phase 4 polish  
+**Overall:** ~75%
 
 ---
 
@@ -62,7 +62,7 @@
 |------|--------|-------|
 | GitHub Action | [x] | `.github/workflows/cascade.yml` — fixture impact+generate+apply; artifact upload; PR comment when token+PR |
 | PR comment with blast radius **+ rationale** | [x] | `cascade/comment.py` → `pr_comment.md`; live post via `github_act.post_pr_comment` |
-| Downstream PR open/update (rewritten files) | [~] | Dry-run writes `artifacts/rewritten/` + `downstream_pr.json`; live open stub (Phase 5 depth) |
+| Downstream PR open/update (rewritten files) | [x] | Dry-run: `downstream_pr.diff` + `downstream_pr.md` + reviewers from owners; live PR when `CASCADE_DOWNSTREAM_HEAD` set |
 | DataHub write-back (doc/tags/description) | [x] | `cascade/datahub_write.py` dry-run JSON; live behind `CASCADE_WRITEBACK=1` |
 | ML write-back (retrain tag + model doc) | [x] | Same module; `ml_writeback.json` |
 | Migrated lifecycle on merge | [x] | `mark_migrated` + `--mark-migrated` / Action step; no-op dry-run without credentials |
@@ -207,3 +207,10 @@ _None yet._
 - `.github/workflows/cascade.yml` — fixture impact→generate→apply; uploads artifacts; comments on PR events
 - `tests/test_apply.py` — dry-run self-checks (no live GH/DataHub required)
 - Live gaps: real GitHub branch/PR create for downstream files; real MCP aspects (stub ingestProposal)
+
+### 2026-07-28 (Phase 3 closeout — downstream patch)
+
+- `build_downstream_patch` / `downstream_pr.diff` — unified diff from original→rewritten SQL
+- `downstream_pr.md` — PR body with blast-radius comment + suggested reviewers from DataHub owners
+- Live open gated on `GITHUB_TOKEN` + `CASCADE_DOWNSTREAM_HEAD` (pushed branch); else dry-run artifacts
+- Phase 3 items all [x]; next: Phase 4 demo CLI + Skill PR

@@ -53,14 +53,32 @@ class TestGitHubAct(unittest.TestCase):
     def test_downstream_dry_run_writes_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = {k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}
-            with mock.patch.dict(os.environ, env, clear=True):
-                result = open_or_update_downstream_pr(
-                    {"examples/models/fct_orders.sql": "SELECT 1"},
-                    out_dir=tmp,
-                )
+            cwd = os.getcwd()
+            os.chdir(ROOT)
+            try:
+                with mock.patch.dict(os.environ, env, clear=True):
+                    result = open_or_update_downstream_pr(
+                        {"examples/models/fct_orders.sql": GOLDEN_SQL.read_text()},
+                        out_dir=tmp,
+                        reviewers=["alice"],
+                    )
+            finally:
+                os.chdir(cwd)
             self.assertTrue(result["dry_run"])
             self.assertTrue(Path(tmp, "rewritten", "fct_orders.sql").exists())
             self.assertTrue(Path(tmp, "downstream_pr.json").exists())
+            patch = Path(tmp, "downstream_pr.diff").read_text()
+            self.assertIn("-    user_id,", patch)
+            self.assertIn("+    customer_id,", patch)
+            body = Path(tmp, "downstream_pr.md").read_text()
+            self.assertIn("@alice", body)
+
+    def test_owner_urns_to_reviewers(self):
+        from cascade.github_act import owner_urns_to_reviewers
+        self.assertEqual(
+            owner_urns_to_reviewers(["urn:li:corpuser:alice", "urn:li:corpuser:bob"]),
+            ["alice", "bob"],
+        )
 
 
 class TestDataHubWrite(unittest.TestCase):
@@ -104,6 +122,13 @@ class TestDataHubWrite(unittest.TestCase):
 
 
 class TestApply(unittest.TestCase):
+    def setUp(self):
+        self._cwd = os.getcwd()
+        os.chdir(ROOT)
+
+    def tearDown(self):
+        os.chdir(self._cwd)
+
     def test_run_apply_dry_run_end_to_end(self):
         report = json.loads(GOLDEN_REPORT.read_text())
         report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
@@ -113,13 +138,19 @@ class TestApply(unittest.TestCase):
                 summary = run_apply(report, out_dir=tmp, mark_lifecycle=True)
             self.assertTrue(Path(tmp, "pr_comment.md").exists())
             self.assertTrue(Path(tmp, "rewritten", "fct_orders.sql").exists())
+            self.assertTrue(Path(tmp, "downstream_pr.diff").exists())
+            self.assertTrue(Path(tmp, "downstream_pr.md").exists())
             self.assertTrue(Path(tmp, "datahub_writeback.json").exists())
             self.assertTrue(Path(tmp, "ml_writeback.json").exists())
             self.assertTrue(Path(tmp, "migrated.json").exists())
             self.assertTrue(Path(tmp, "apply_summary.json").exists())
             self.assertTrue(summary["comment"]["dry_run"])
+            self.assertIn("alice", summary["downstream_pr"]["reviewers"])
             sql = Path(tmp, "rewritten", "fct_orders.sql").read_text()
             self.assertEqual(sql, GOLDEN_SQL.read_text())
+            patch = Path(tmp, "downstream_pr.diff").read_text()
+            self.assertIn("-    user_id,", patch)
+            self.assertIn("+    customer_id,", patch)
 
     def test_remediations_to_files(self):
         files = remediations_to_files([
