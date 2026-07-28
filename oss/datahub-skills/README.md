@@ -10,7 +10,11 @@ skills/breaking-change-remediation/
 
 ## Upstream PR
 
-Open (or link) a PR against `datahub-project/datahub-skills` that adds this skill directory. Until merged, agents can point at this repo path or copy the folder into a local skills install.
+Opened against `datahub-project/datahub-skills`:
+
+**https://github.com/datahub-project/datahub-skills/pull/63**
+
+Until merged, agents can point at this repo path or copy the folder into a local skills install.
 
 ## Install locally (Cursor / skills CLI)
 

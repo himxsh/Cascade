@@ -84,7 +84,7 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 
 ## Open-source Skill
 
-Draft DataHub Skill [`breaking-change-remediation`](oss/datahub-skills/skills/breaking-change-remediation/SKILL.md) (MVP named bonus) lives under [`oss/datahub-skills/`](oss/datahub-skills/). See that README for contributing upstream to [`datahub-project/datahub-skills`](https://github.com/datahub-project/datahub-skills).
+Draft DataHub Skill [`breaking-change-remediation`](oss/datahub-skills/skills/breaking-change-remediation/SKILL.md) (MVP named bonus) lives under [`oss/datahub-skills/`](oss/datahub-skills/). Upstream PR: [datahub-project/datahub-skills#63](https://github.com/datahub-project/datahub-skills/pull/63).
 
 ## Architecture
 
