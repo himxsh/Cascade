@@ -10,11 +10,9 @@ skills/breaking-change-remediation/
 
 ## Upstream PR
 
-Opened against `datahub-project/datahub-skills`:
+**Do not open upstream until coordinated.** An earlier accidental PR ([datahub-project/datahub-skills#63](https://github.com/datahub-project/datahub-skills/pull/63)) was closed with an apology.
 
-**https://github.com/datahub-project/datahub-skills/pull/63**
-
-Until merged, agents can point at this repo path or copy the folder into a local skills install.
+Until a real contribution is planned, keep this skill in Cascade only (or copy locally):
 
 ## Install locally (Cursor / skills CLI)
 

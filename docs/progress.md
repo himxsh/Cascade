@@ -73,7 +73,7 @@
 |------|--------|-------|
 | Demo video ≤3 min (fixture path) | [ ] | Human: record against `cascade demo` |
 | Devpost submission | [ ] | Human |
-| DataHub Skill PR (before deadline) | [x] | Upstream: https://github.com/datahub-project/datahub-skills/pull/63 — draft also in `oss/datahub-skills/` |
+| DataHub Skill PR (before deadline) | [~] | In-repo draft only: `oss/datahub-skills/`. Upstream #63 opened by mistake → closed with apology |
 | Feedback survey opt-in | [ ] | Human |
 | Harden README / one-command demo | [x] | `cascade demo`; README one-command section |
 
@@ -221,4 +221,4 @@ _None yet._
 - `cascade demo` / `cascade/demo.py` — one-command fixture impact→generate→apply
 - README hardened around `cascade demo` as the judge path
 - `oss/datahub-skills/skills/breaking-change-remediation/` — Skill SKILL.md + references for upstream contribution
-- Remaining human: demo video, Devpost, survey; Skill upstream PR opened: https://github.com/datahub-project/datahub-skills/pull/63
+- Remaining human: demo video, Devpost, survey. Skill stays in-repo (`oss/datahub-skills/`); upstream datahub-skills#63 closed with apology (opened by mistake)
