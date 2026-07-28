@@ -1,8 +1,8 @@
 # Cascade — Progress
 
 **Last updated:** 2026-07-28  
-**Current phase:** Phase 3 complete → Phase 4 polish  
-**Overall:** ~75%
+**Current phase:** Phase 4 — Polish + submit  
+**Overall:** ~85%
 
 ---
 
@@ -71,10 +71,11 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Demo video ≤3 min (fixture path) | [ ] | |
-| Devpost submission | [ ] | |
-| DataHub Skill PR (before deadline) | [ ] | Named bonus — now MVP |
-| Feedback survey opt-in | [ ] | |
+| Demo video ≤3 min (fixture path) | [ ] | Human: record against `cascade demo` |
+| Devpost submission | [ ] | Human |
+| DataHub Skill PR (before deadline) | [~] | Skill draft in `oss/datahub-skills/`; upstream PR link when opened |
+| Feedback survey opt-in | [ ] | Human |
+| Harden README / one-command demo | [x] | `cascade demo`; README one-command section |
 
 ## Full plan (Phases 5–10) — only after MVP DoD
 
@@ -214,3 +215,10 @@ _None yet._
 - `downstream_pr.md` — PR body with blast-radius comment + suggested reviewers from DataHub owners
 - Live open gated on `GITHUB_TOKEN` + `CASCADE_DOWNSTREAM_HEAD` (pushed branch); else dry-run artifacts
 - Phase 3 items all [x]; next: Phase 4 demo CLI + Skill PR
+
+### 2026-07-28 (Phase 4 — demo CLI + Skill draft)
+
+- `cascade demo` / `cascade/demo.py` — one-command fixture impact→generate→apply
+- README hardened around `cascade demo` as the judge path
+- `oss/datahub-skills/skills/breaking-change-remediation/` — Skill SKILL.md + references for upstream contribution
+- Remaining human: demo video, Devpost, survey; upstream Skill PR open/link

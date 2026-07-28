@@ -9,6 +9,7 @@ from cascade.agent import choose_and_rewrite
 from cascade.apply import run_apply
 from cascade.datahub_fixture import load_catalog
 from cascade.datahub_live import resolve_catalog
+from cascade.demo import DEFAULT_DIFF, DEFAULT_MODELS, DEFAULT_URN, run_demo
 from cascade.impact import build_impact_report
 from cascade.diff_parser import load_changes
 
@@ -103,6 +104,20 @@ def cmd_apply(args: argparse.Namespace) -> None:
     sys.stdout.write("\n")
 
 
+def cmd_demo(args: argparse.Namespace) -> None:
+    result = run_demo(
+        out_dir=args.out,
+        urn=args.urn,
+        diff=args.diff,
+        models_dir=args.models_dir,
+        fixture=args.fixture,
+        source=args.source,
+        mark_migrated=not args.skip_migrated,
+    )
+    json.dump(result, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Cascade — schema change impact analyzer")
     sub = parser.add_subparsers(dest="command")
@@ -150,6 +165,28 @@ def main() -> None:
     )
     apply_p.add_argument("--pr-number", type=int, help="Source PR number for live comment")
     apply_p.set_defaults(func=cmd_apply)
+
+    demo_p = sub.add_parser(
+        "demo",
+        help="One-command fixture path: impact → generate → apply dry-run",
+    )
+    demo_p.add_argument("--out", default="artifacts/demo", help="Demo artifact directory")
+    demo_p.add_argument("--urn", default=DEFAULT_URN, help="Source dataset URN")
+    demo_p.add_argument("--diff", default=DEFAULT_DIFF, help="Sample diff/changes path")
+    demo_p.add_argument("--models-dir", default=DEFAULT_MODELS, help="Downstream SQL models")
+    demo_p.add_argument("--fixture", help="Override fixture path")
+    demo_p.add_argument(
+        "--source",
+        choices=["fixture", "live", "auto"],
+        default="fixture",
+        help="Catalog source (default fixture)",
+    )
+    demo_p.add_argument(
+        "--skip-migrated",
+        action="store_true",
+        help="Skip migrated lifecycle artifact",
+    )
+    demo_p.set_defaults(func=cmd_demo)
 
     args = parser.parse_args()
     args.func(args)
