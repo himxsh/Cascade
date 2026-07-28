@@ -1,8 +1,8 @@
 # Cascade — Progress
 
 **Last updated:** 2026-07-28  
-**Current phase:** Phase 2 — Reason + generate path (CP3)  
-**Overall:** ~55%
+**Current phase:** Phase 3 — Act + write-back (dry-run scaffolding)  
+**Overall:** ~70%
 
 ---
 
@@ -60,12 +60,12 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| GitHub Action | [ ] | |
-| PR comment with blast radius **+ rationale** | [ ] | |
-| Downstream PR open/update (rewritten files) | [ ] | |
-| DataHub write-back (doc/tags/description) | [ ] | |
-| ML write-back (retrain tag + model doc) | [ ] | |
-| Migrated lifecycle on merge | [ ] | |
+| GitHub Action | [x] | `.github/workflows/cascade.yml` — fixture impact+generate+apply; artifact upload; PR comment when token+PR |
+| PR comment with blast radius **+ rationale** | [x] | `cascade/comment.py` → `pr_comment.md`; live post via `github_act.post_pr_comment` |
+| Downstream PR open/update (rewritten files) | [~] | Dry-run writes `artifacts/rewritten/` + `downstream_pr.json`; live open stub (Phase 5 depth) |
+| DataHub write-back (doc/tags/description) | [x] | `cascade/datahub_write.py` dry-run JSON; live behind `CASCADE_WRITEBACK=1` |
+| ML write-back (retrain tag + model doc) | [x] | Same module; `ml_writeback.json` |
+| Migrated lifecycle on merge | [x] | `mark_migrated` + `--mark-migrated` / Action step; no-op dry-run without credentials |
 
 ## Phase 4 — Polish + submit
 
@@ -109,6 +109,7 @@ See [plan.md § Full plan](./plan.md). Do not start until Phase 4 demo is green.
 | 2026-07-24 | GraphQL GMS read client via `urllib.request` (MCP stand-in) | Ponytail: stdlib HTTP, no new deps; swap to MCP SDK in Phase 3 write-back |
 | 2026-07-24 | Hybrid live-fixture catalog: live datasets/lineage/owners, fixture ML | MLBP aspects are inconsistently available via GMS GraphQL; documented in code |
 | 2026-07-24 | `--source fixture|live|auto` CLI flag | `auto` prints a stderr notice which backend was used |
+| 2026-07-28 | Act/write-back defaults to dry-run artifacts | Demo/CI green without secrets; live GH comment + `CASCADE_WRITEBACK=1` optional |
 
 ---
 
@@ -196,3 +197,13 @@ _None yet._
 - `.github/workflows/ci.yml` — unittest discover on push/PR (includes F11 golden eval)
 - README fixture path: impact → generate → `diff` against headline / golden
 - Phase 2 complete; next is Phase 3 Act + write-back
+
+### 2026-07-28 (Phase 3 — Act + write-back dry-run)
+
+- `cascade/comment.py` — PR comment markdown (blast radius + per-node strategy/rationale + ML)
+- `cascade/github_act.py` — dry-run artifacts; posts PR comment when `GITHUB_TOKEN` + PR number set
+- `cascade/datahub_write.py` — dataset + ML + migrated write-back; dry-run default; live via `CASCADE_WRITEBACK=1`
+- `cascade/apply.py` + `cascade apply` CLI — orchestrates comment → rewritten files → DataHub/ML → optional migrated
+- `.github/workflows/cascade.yml` — fixture impact→generate→apply; uploads artifacts; comments on PR events
+- `tests/test_apply.py` — dry-run self-checks (no live GH/DataHub required)
+- Live gaps: real GitHub branch/PR create for downstream files; real MCP aspects (stub ingestProposal)

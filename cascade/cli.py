@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from cascade.agent import choose_and_rewrite
+from cascade.apply import run_apply
 from cascade.datahub_fixture import load_catalog
 from cascade.datahub_live import resolve_catalog
 from cascade.impact import build_impact_report
@@ -78,6 +79,30 @@ def cmd_generate(args: argparse.Namespace) -> None:
     sys.stdout.write("\n")
 
 
+def cmd_apply(args: argparse.Namespace) -> None:
+    report_data = json.loads(Path(args.report).read_text())
+    if args.generate or not report_data.get("remediations"):
+        source_urn = report_data.get("source_urn", "")
+        changes = report_data.get("changes", [])
+        catalog = load_catalog(args.fixture)
+        models_dir = args.models_dir or "examples/models"
+        report_data["remediations"] = choose_and_rewrite(
+            changes=changes,
+            catalog=catalog,
+            models_dir=models_dir,
+            source_urn=source_urn,
+        )
+
+    summary = run_apply(
+        report_data,
+        out_dir=args.out,
+        mark_lifecycle=args.mark_migrated,
+        pr_number=args.pr_number,
+    )
+    json.dump(summary, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Cascade — schema change impact analyzer")
     sub = parser.add_subparsers(dest="command")
@@ -104,6 +129,27 @@ def main() -> None:
     gen_p.add_argument("--models-dir", help="Directory with downstream model SQL files")
     gen_p.add_argument("--fixture", help="Override fixture path")
     gen_p.set_defaults(func=cmd_generate)
+
+    apply_p = sub.add_parser(
+        "apply",
+        help="Act + write-back: PR comment, downstream artifacts, DataHub/ML tags (dry-run without secrets)",
+    )
+    apply_p.add_argument("--report", required=True, help="Path to impact report JSON")
+    apply_p.add_argument("--out", required=True, help="Artifact output directory")
+    apply_p.add_argument("--models-dir", help="Directory with downstream model SQL files")
+    apply_p.add_argument("--fixture", help="Override fixture path")
+    apply_p.add_argument(
+        "--generate",
+        action="store_true",
+        help="(Re)run agent remediations before apply",
+    )
+    apply_p.add_argument(
+        "--mark-migrated",
+        action="store_true",
+        help="Also emit migrated lifecycle write-back (merge hook / stub)",
+    )
+    apply_p.add_argument("--pr-number", type=int, help="Source PR number for live comment")
+    apply_p.set_defaults(func=cmd_apply)
 
     args = parser.parse_args()
     args.func(args)
