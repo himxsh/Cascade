@@ -1,8 +1,8 @@
 # Cascade — Progress
 
-**Last updated:** 2026-07-24  
-**Current phase:** Phase 2 — Reason + generate path  
-**Overall:** ~45%
+**Last updated:** 2026-07-28  
+**Current phase:** Phase 2 — Reason + generate path (CP3)  
+**Overall:** ~55%
 
 ---
 
@@ -53,8 +53,8 @@
 | Fallbacks: `adapter_view` / `deprecate` | [x] | Demo agent selects adapter_view when no SQL file, deprecate when FIELD_REMOVED |
 | Schema gate (no invented columns) | [x] | `cascade/schema_gate.py` — naive identifier scanner; rejects unknown identifiers, table aliases + qualified refs pass through |
 | Thin ML: mark `mlModel` retrain-suggested | [x] | Already in impact from Phase 1 — `get_ml_impact()` via feature→model edge |
-| Golden-diff eval in CI | [ ] | Deferred to Phase 2 Checkpoint 3 |
-| `examples/` incl. headline rewritten PR diff | [~] | Source model + generate path land; static headline PR diff artifact in CP3 |
+| Golden-diff eval in CI | [x] | `tests/test_golden_diff.py` + `tests/golden/raw_orders_rename/`; `.github/workflows/ci.yml` |
+| `examples/` incl. headline rewritten PR diff | [x] | `examples/rewritten/fct_orders.sql` + `headline_pr.diff` |
 
 ## Phase 3 — Act + write-back
 
@@ -187,3 +187,12 @@ _None yet._
 - `tests/test_diff_parser.py` — 12 tests covering annotation (both comment styles), heuristic rename, field removed, multi-file, SQL keyword filtering, JSON dispatcher
 - All 27 existing tests still pass
 - Updated progress.md: Phase 2 started, diff classifier done, overall ~45%
+
+### 2026-07-28 (Phase 2 Checkpoint 3 — golden-diff eval)
+
+- `tests/golden/raw_orders_rename/` — expected ImpactReport (sans rewritten_sql) + expected `fct_orders.sql`
+- `tests/test_golden_diff.py` — deterministic fixture path must match golden; examples headline kept in sync
+- `examples/rewritten/` — headline mergeable SQL + `headline_pr.diff` for judges
+- `.github/workflows/ci.yml` — unittest discover on push/PR (includes F11 golden eval)
+- README fixture path: impact → generate → `diff` against headline / golden
+- Phase 2 complete; next is Phase 3 Act + write-back

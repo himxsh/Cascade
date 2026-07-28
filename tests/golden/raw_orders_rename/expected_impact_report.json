@@ -1,0 +1,60 @@
+{
+  "source_urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+  "changes": [
+    {
+      "type": "FIELD_RENAMED",
+      "from": "user_id",
+      "to": "customer_id",
+      "detected_by": "heuristic"
+    }
+  ],
+  "downstream": [
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:alice"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:alice"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:bob"
+      ]
+    }
+  ],
+  "ml_impact": [
+    {
+      "model_urn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+      "via_feature": "user_id",
+      "action": "retrain-suggested"
+    }
+  ],
+  "severity": "high",
+  "remediations": [
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)",
+      "strategy": "adapter_view",
+      "rationale": "no SQL model found for downstream node; recommend adapter view to alias user_id->customer_id while downstream migrates"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)",
+      "path": "examples/models/fct_orders.sql",
+      "strategy": "rewrite",
+      "rationale": "downstream SQL fct_orders.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)",
+      "strategy": "adapter_view",
+      "rationale": "no SQL model found for downstream node; recommend adapter view to alias user_id->customer_id while downstream migrates"
+    }
+  ]
+}
