@@ -8,14 +8,14 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from cascade.datahub_live import health_check
 from cascade.demo import DEFAULT_URN
 from cascade.ui_run import load_demo_diff, run_ui_pipeline
 
-_PUBLIC = Path(__file__).resolve().parents[1] / "public"
+# Built UI lives next to the function so Vercel includes it in the bundle.
+_STATIC = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="Cascade UI API", version="0.1.0")
 app.add_middleware(
@@ -40,7 +40,7 @@ class RunRequest(BaseModel):
 @app.get("/api/health")
 def api_health() -> dict[str, Any]:
     gms_ok = health_check()
-    return {"ok": True, "gms": gms_ok}
+    return {"ok": True, "gms": gms_ok, "ui": (_STATIC / "index.html").is_file()}
 
 
 @app.get("/api/demo-diff")
@@ -64,23 +64,33 @@ def api_run(body: RunRequest) -> dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        # Live GMS / catalog failures surface clearly
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
-# SPA fallback when public/ is present (Vercel build copies frontend/dist → public/)
-if (_PUBLIC / "index.html").is_file():
-    assets = _PUBLIC / "assets"
-    if assets.is_dir():
-        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+@app.get("/")
+def spa_index() -> FileResponse:
+    index = _STATIC / "index.html"
+    if not index.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="UI bundle missing (api/static). Rebuild with scripts/vercel_build.py.",
+        )
+    return FileResponse(index)
 
-    @app.get("/")
-    def spa_index() -> FileResponse:
-        return FileResponse(_PUBLIC / "index.html")
 
-    favicon = _PUBLIC / "favicon.svg"
-    if favicon.is_file():
+@app.get("/favicon.svg")
+def spa_favicon() -> FileResponse:
+    path = _STATIC / "favicon.svg"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="favicon not found")
+    return FileResponse(path)
 
-        @app.get("/favicon.svg")
-        def spa_favicon() -> FileResponse:
-            return FileResponse(favicon)
+
+@app.get("/assets/{asset_path:path}")
+def spa_asset(asset_path: str) -> FileResponse:
+    # ponytail: path traversal guard; assets are hashed build outputs only
+    root = (_STATIC / "assets").resolve()
+    target = (root / asset_path).resolve()
+    if not str(target).startswith(str(root)) or not target.is_file():
+        raise HTTPException(status_code=404, detail="asset not found")
+    return FileResponse(target)

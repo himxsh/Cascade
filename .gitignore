@@ -14,3 +14,5 @@ uv.lock
 artifacts/
 .vercel
 public/
+api/static/
+
