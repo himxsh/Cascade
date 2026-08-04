@@ -2,7 +2,7 @@
 
 **Version:** 0.1  
 **Status:** Draft  
-**Owner:** Cascade hackathon team
+
 
 ---
 
@@ -13,6 +13,8 @@ A schema change (rename, drop, type change) looks local in a PR, but its blast r
 > Framing note: we do **not** claim to catch *silent* data-plane failures (frozen loads, drift the catalog can't see) — that is a different, already-occupied problem. Cascade's job is turning a **declared, uncoordinated schema change into a coordinated migration** before it lands.
 
 ---
+
+
 
 ## 2. Solution
 
@@ -37,18 +39,24 @@ This is **The Agent Hackathon**, so the LLM reasoning must be real and visible, 
 - **SQL rewriting** of the affected model, emitted only after passing the schema-validation gate (NF2).
 - **Justification**: every remediation carries a one-line rationale that appears in the PR comment and the DataHub write-back — this is what the demo shows on camera to prove reasoning happened.
 
-**Primary codegen story = `rewrite`.** `adapter_view` is the fallback, not the headline, so the "metadata-aware code generation" claim holds up under judge scrutiny.
+**Primary codegen story =** `rewrite`**.** `adapter_view` is the fallback, not the headline, so the "metadata-aware code generation" claim holds up under judge scrutiny.
 
 ---
 
+
+
 ## 3. Users & use cases
 
-| Actor | Job |
-|-------|-----|
-| Data engineer | Open a breaking PR; get automatic impact + fix PRs |
-| Downstream owner | Review a Cascade-generated patch instead of discovering breakage in prod |
-| Platform / ML team | Trust that model/feature deps are in the blast-radius path |
-| Judge / reviewer | Clone repo, run demo, inspect `examples/` without a live warehouse |
+
+| Actor              | Job                                                                      |
+| ------------------ | ------------------------------------------------------------------------ |
+| Data engineer      | Open a breaking PR; get automatic impact + fix PRs                       |
+| Downstream owner   | Review a Cascade-generated patch instead of discovering breakage in prod |
+| Platform / ML team | Trust that model/feature deps are in the blast-radius path               |
+| Judge / reviewer   | Clone repo, run demo, inspect `examples/` without a live warehouse       |
+
+
+
 
 ### Primary use case (demo)
 
@@ -56,79 +64,105 @@ Upstream table `analytics.raw_orders` renames `user_id` → `customer_id`. Three
 
 ---
 
+
+
 ## 4. Challenge mapping
 
-| Hackathon challenge | How Cascade maps |
-|---------------------|------------------|
-| Agents That Do Real Work | Reasons over lineage, acts in GitHub, writes back to DataHub so the next agent inherits context |
-| Metadata-Aware Code Generation | Rewrites downstream dbt/SQL from live schemas (primary path), schema-gated |
+
+| Hackathon challenge                 | How Cascade maps                                                                                                                                               |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agents That Do Real Work            | Reasons over lineage, acts in GitHub, writes back to DataHub so the next agent inherits context                                                                |
+| Metadata-Aware Code Generation      | Rewrites downstream dbt/SQL from live schemas (primary path), schema-gated                                                                                     |
 | Production ML Agents (in MVP, thin) | Seed one `mlFeature`→`mlModel` edge; when a change hits a feature column, tag the model `cascade:retrain-suggested` and write an incident doc on the model URN |
+
 
 Touching all three categories with **one run** is a deliberate originality multiplier — but depth of the code-gen + write-back loop is the priority; the ML node stays thin in MVP (one edge, one tag, one doc).
 
 ---
 
+
+
 ## 5. Functional requirements
+
+
 
 ### 5.1 Must have (MVP)
 
-| ID | Requirement |
-|----|-------------|
-| F1 | Parse PR diffs for SQL/dbt schema changes: field removed, renamed, type changed. Rename detection runs a **heuristic first**; an optional `# cascade: rename a -> b` annotation *confirms/overrides*, it is not required to trigger |
-| F2 | Resolve affected dataset URN(s) via DataHub search / config mapping |
-| F3 | Fetch schema + downstream lineage + owners via MCP tools |
-| F4 | **Agentic step:** for each downstream node, the LLM selects a strategy (`rewrite` / `adapter_view` / `deprecate`, see §2.1) with a one-line rationale, using lineage + owner + severity context |
-| F5 | **Primary codegen:** `rewrite` the affected downstream model SQL to use the new schema. Every emitted file passes the schema-validation gate — it may only reference columns present in DataHub (NF2). `adapter_view` is the fallback |
-| F6 | Produce a structured **ImpactReport** (JSON): change, nodes, owners, severity, chosen strategy + rationale per node |
-| F7 | Post ImpactReport summary (with per-node rationale) as a GitHub PR comment |
-| F8 | Open or update at least one downstream PR with the rewritten files |
-| F9 | Write-back: `save_document`, `add_tags` (`cascade:breaking-pending`), `update_description` |
-| F10 | **ML (thin):** if a changed column feeds a seeded `mlFeature`, tag the linked `mlModel` `cascade:retrain-suggested` and write an incident doc on the model URN |
-| F11 | **Eval / self-check in MVP:** ≥1 golden schema-diff → snapshot of expected ImpactReport + rewritten SQL, run in CI (satisfies "does it actually work end-to-end" and the one-runnable-check rule) |
-| F12 | Ship static samples under `examples/`, including **the one headline artifact**: a real, readable rewritten downstream PR diff a data team would merge |
-| F13 | Public repo with Apache 2.0 license; runnable README |
+
+| ID  | Requirement                                                                                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | Parse PR diffs for SQL/dbt schema changes: field removed, renamed, type changed. Rename detection runs a **heuristic first**; an optional `# cascade: rename a -> b` annotation *confirms/overrides*, it is not required to trigger   |
+| F2  | Resolve affected dataset URN(s) via DataHub search / config mapping                                                                                                                                                                   |
+| F3  | Fetch schema + downstream lineage + owners via MCP tools                                                                                                                                                                              |
+| F4  | **Agentic step:** for each downstream node, the LLM selects a strategy (`rewrite` / `adapter_view` / `deprecate`, see §2.1) with a one-line rationale, using lineage + owner + severity context                                       |
+| F5  | **Primary codegen:** `rewrite` the affected downstream model SQL to use the new schema. Every emitted file passes the schema-validation gate — it may only reference columns present in DataHub (NF2). `adapter_view` is the fallback |
+| F6  | Produce a structured **ImpactReport** (JSON): change, nodes, owners, severity, chosen strategy + rationale per node                                                                                                                   |
+| F7  | Post ImpactReport summary (with per-node rationale) as a GitHub PR comment                                                                                                                                                            |
+| F8  | Open or update at least one downstream PR with the rewritten files                                                                                                                                                                    |
+| F9  | Write-back: `save_document`, `add_tags` (`cascade:breaking-pending`), `update_description`                                                                                                                                            |
+| F10 | **ML (thin):** if a changed column feeds a seeded `mlFeature`, tag the linked `mlModel` `cascade:retrain-suggested` and write an incident doc on the model URN                                                                        |
+| F11 | **Eval / self-check in MVP:** ≥1 golden schema-diff → snapshot of expected ImpactReport + rewritten SQL, run in CI (satisfies "does it actually work end-to-end" and the one-runnable-check rule)                                     |
+| F12 | Ship static samples under `examples/`, including **the one headline artifact**: a real, readable rewritten downstream PR diff a data team would merge                                                                                 |
+| F13 | Public repo with Apache 2.0 license; runnable README                                                                                                                                                                                  |
+
+
+
 
 ### 5.2 Should have
 
-| ID | Requirement |
-|----|-------------|
-| S1 | Clear pending tag → `cascade:migrated` when remediation merges |
-| S2 | Request review from DataHub owners (GitHub usernames if mapped) |
-| S3 | CLI for local dry-run without GitHub (`cascade impact`, `cascade generate`) |
-| S4 | Fixture/offline mode when MCP unavailable (demo resilience — record the video against this path) |
-| S5 | DataHub **Skill** PR (`breaking-change-remediation`) opened **before** the deadline, not after (named bonus criterion) |
+
+| ID  | Requirement                                                                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------------------- |
+| S1  | Clear pending tag → `cascade:migrated` when remediation merges                                                         |
+| S2  | Request review from DataHub owners (GitHub usernames if mapped)                                                        |
+| S3  | CLI for local dry-run without GitHub (`cascade impact`, `cascade generate`)                                            |
+| S4  | Fixture/offline mode when MCP unavailable (demo resilience — record the video against this path)                       |
+| S5  | DataHub **Skill** PR (`breaking-change-remediation`) opened **before** the deadline, not after (named bonus criterion) |
+
+
+
 
 ### 5.3 Nice to have (cut first)
 
 Mapped to the **full plan** in [plan.md](./plan.md) (Phases 5–10) if the demo MVP ships early.
 
-| ID | Requirement | Full-plan phase |
-|----|-------------|-----------------|
-| N1 | Multi-repo PR train | 6 |
-| N2 | Slack notify owners | 6 |
-| N3 | Airflow/Prefect DAG / tests generation | 6 |
-| N4 | Upstream contribution: DataHub Skill for breaking-change remediation | 9 |
-| N5 | Dashboard / LookML consumer patches | 6 / 10 |
-| N6 | Column-level severity + idempotent Action | 5 |
-| N7 | ML model/feature retrain tagging | 7 |
-| N8 | Runtime schema-drift listener | 8 |
-| N9 | Policy status check + minimal paste-diff UI | 10 |
+
+| ID  | Requirement                                                          | Full-plan phase |
+| --- | -------------------------------------------------------------------- | --------------- |
+| N1  | Multi-repo PR train                                                  | 6               |
+| N2  | Slack notify owners                                                  | 6               |
+| N3  | Airflow/Prefect DAG / tests generation                               | 6               |
+| N4  | Upstream contribution: DataHub Skill for breaking-change remediation | 9               |
+| N5  | Dashboard / LookML consumer patches                                  | 6 / 10          |
+| N6  | Column-level severity + idempotent Action                            | 5               |
+| N7  | ML model/feature retrain tagging                                     | 7               |
+| N8  | Runtime schema-drift listener                                        | 8               |
+| N9  | Policy status check + minimal paste-diff UI                          | 10              |
+
 
 ---
+
+
 
 ## 6. Non-functional requirements
 
-| ID | Requirement |
-|----|-------------|
-| NF1 | Demo path completes in ≤5 minutes on a laptop with Docker |
-| NF2 | Agent must not invent column names (schema gate) |
+
+| ID  | Requirement                                                                       |
+| --- | --------------------------------------------------------------------------------- |
+| NF1 | Demo path completes in ≤5 minutes on a laptop with Docker                         |
+| NF2 | Agent must not invent column names (schema gate)                                  |
 | NF3 | Secrets via env only (`DATAHUB_GMS_URL`, token, `GITHUB_TOKEN`) — never committed |
-| NF4 | Deterministic ImpactReport for the seeded graph (self-check) |
-| NF5 | Video ≤3 minutes showing live functionality |
+| NF4 | Deterministic ImpactReport for the seeded graph (self-check)                      |
+| NF5 | Video ≤3 minutes showing live functionality                                       |
+
 
 ---
 
+
+
 ## 7. DataHub integration contract
+
+
 
 ### Read (MCP)
 
@@ -137,11 +171,15 @@ Mapped to the **full plan** in [plan.md](./plan.md) (Phases 5–10) if the demo 
 - `get_lineage` — blast radius (downstream)
 - Entity aspects: owners, tags, glossary (for severity + reviewers)
 
+
+
 ### Write (MCP)
 
 - `save_document` — change plan / incident narrative
 - `add_tags` / `remove_tags` — lifecycle tags
 - `update_description` — dated note on source dataset
+
+
 
 ### Explicit non-use
 
@@ -149,7 +187,11 @@ Do not rebuild Analytics Agent text-to-SQL as the product surface.
 
 ---
 
+
+
 ## 8. Interfaces
+
+
 
 ### CLI
 
@@ -160,11 +202,15 @@ cascade apply   --report <impact.json>   # GitHub + DataHub write-back (CI)
 cascade demo    # runs seeded scenario end-to-end
 ```
 
+
+
 ### GitHub Action inputs
 
 - Trigger: `pull_request` on paths `**/*.sql`, `**/models/**`, `**/schema.yml`
 - Secrets: DataHub + GitHub tokens
 - Outputs: PR comment + optional downstream PR URL
+
+
 
 ### ImpactReport (sketch)
 
@@ -195,6 +241,8 @@ Note: `strategy` and `rationale` are LLM-produced (the agentic step, F4); everyt
 
 ---
 
+
+
 ## 9. Demo dataset (seed)
 
 Minimum graph:
@@ -209,19 +257,25 @@ Breaking change for demo: rename `user_id` → `customer_id` on `raw.orders`. Th
 
 ---
 
+
+
 ## 10. Success metrics (hackathon)
 
-| Signal | Pass bar |
-|--------|----------|
-| Judge understands in video | Yes without reading code |
+
+| Signal                               | Pass bar                                                                      |
+| ------------------------------------ | ----------------------------------------------------------------------------- |
+| Judge understands in video           | Yes without reading code                                                      |
 | Generated SQL is genuinely mergeable | `rewrite` output would merge with light review — not just a column-alias shim |
-| Agentic reasoning is visible | Strategy + rationale shown on camera; not obviously a template pipeline |
-| Write-back visible | Tag + doc on dataset **and** `retrain-suggested` on the model |
-| Originality | Touches 3 categories in one run; clearly beyond “show me lineage” |
-| Works end-to-end | Golden-diff eval (F11) passes in CI |
-| Setup | README gets them running or `examples/` stand alone |
+| Agentic reasoning is visible         | Strategy + rationale shown on camera; not obviously a template pipeline       |
+| Write-back visible                   | Tag + doc on dataset **and** `retrain-suggested` on the model                 |
+| Originality                          | Touches 3 categories in one run; clearly beyond “show me lineage”             |
+| Works end-to-end                     | Golden-diff eval (F11) passes in CI                                           |
+| Setup                                | README gets them running or `examples/` stand alone                           |
+
 
 ---
+
+
 
 ## 11. Out of scope
 
@@ -233,14 +287,19 @@ Breaking change for demo: rename `user_id` → `customer_id` on `raw.orders`. Th
 
 ---
 
+
+
 ## 12. Resolved decisions
 
-| # | Decision | Rationale |
-|---|----------|-----------|
-| 1 | Primary strategy = **`rewrite`** downstream SQL; `adapter_view` is fallback | Keeps the "code a team would merge" claim honest; avoids the shim-only trap |
-| 2 | LLM owns strategy + rewrite; deterministic parts are tools | Makes it a real *agent* for The Agent Hackathon (§2.1) |
-| 3 | Rename detection: **heuristic first**, annotation confirms/overrides | Demo still shows the agent "figuring it out," not requiring a hand-written hint |
-| 4 | ML edge (feature→model) is **in MVP**, kept thin | 3-category coverage in one run for low cost |
-| 5 | Golden-diff eval is **in MVP DoD**, not deferred | "Actually works end-to-end" is scored |
-| 6 | Snowflake-shaped URNs, mono-repo downstream folders | One platform string; cross-repo is Phase 6 |
-| 7 | Record video against the **offline fixture path** | Live MCP loop too fragile to bet the recording on |
+
+| #   | Decision                                                                | Rationale                                                                       |
+| --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 1   | Primary strategy = `rewrite` downstream SQL; `adapter_view` is fallback | Keeps the "code a team would merge" claim honest; avoids the shim-only trap     |
+| 2   | LLM owns strategy + rewrite; deterministic parts are tools              | Makes it a real *agent* for The Agent Hackathon (§2.1)                          |
+| 3   | Rename detection: **heuristic first**, annotation confirms/overrides    | Demo still shows the agent "figuring it out," not requiring a hand-written hint |
+| 4   | ML edge (feature→model) is **in MVP**, kept thin                        | 3-category coverage in one run for low cost                                     |
+| 5   | Golden-diff eval is **in MVP DoD**, not deferred                        | "Actually works end-to-end" is scored                                           |
+| 6   | Snowflake-shaped URNs, mono-repo downstream folders                     | One platform string; cross-repo is Phase 6                                      |
+| 7   | Record video against the **offline fixture path**                       | Live MCP loop too fragile to bet the recording on                               |
+
+
