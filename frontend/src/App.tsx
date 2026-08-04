@@ -117,8 +117,8 @@ export default function App() {
   return (
     <div className="min-h-full bg-ink text-fg">
       <div className="mx-auto max-w-[1280px] px-4 py-5 md:px-6 md:py-6">
-        <header className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-line pb-4">
-          <div className="flex flex-wrap items-end gap-3">
+        <header className="relative mb-5 border-b border-line pb-4 pr-24 sm:pr-28">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h1 className="font-sans text-2xl font-semibold tracking-tight text-fg md:text-3xl">
                 Cascade
@@ -127,17 +127,17 @@ export default function App() {
                 Schema change → coordinated migration
               </p>
             </div>
-            <a
-              href={GITHUB_REPO}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-0.5 inline-flex items-center gap-1.5 border border-line bg-raised px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wide text-fg hover:border-muted"
-            >
-              <GitHubIcon />
-              GitHub
-            </a>
+            <Timeline activeIndex={stepIndex} done={!!result && !running} running={running} />
           </div>
-          <Timeline activeIndex={stepIndex} done={!!result && !running} running={running} />
+          <a
+            href={GITHUB_REPO}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute right-0 top-0 inline-flex items-center gap-1.5 border border-line bg-raised px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wide text-fg hover:border-muted"
+          >
+            <GitHubIcon />
+            GitHub
+          </a>
         </header>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
