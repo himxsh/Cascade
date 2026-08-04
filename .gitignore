@@ -13,6 +13,6 @@ build/
 uv.lock
 artifacts/
 .vercel
-public/
+/public/
 api/static/
 

@@ -18,12 +18,16 @@ from cascade.ui_run import load_demo_diff, run_ui_pipeline
 _STATIC = Path(__file__).resolve().parent / "static"
 
 # Inline so the tab icon works even if api/static/*.svg is dropped from the bundle.
-_FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" fill="#0c0e12"/>
-  <path d="M6 22 L16 6 L26 22" stroke="#c4c9d4" stroke-width="2" fill="none"/>
-  <path d="M10 22 L16 12 L22 22" stroke="#e85d4c" stroke-width="1.5" fill="none"/>
-</svg>
-"""
+# Light tile so it reads on dark browser chrome (the old near-black mark vanished in tabs).
+_FAVICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+    '<rect width="32" height="32" rx="6" fill="#e8eaed"/>'
+    '<path d="M6 23 L16 7 L26 23" stroke="#0c0e12" stroke-width="2.2" '
+    'fill="none" stroke-linejoin="round"/>'
+    '<path d="M10 23 L16 13 L22 23" stroke="#e85d4c" stroke-width="1.8" '
+    'fill="none" stroke-linejoin="round"/>'
+    "</svg>"
+)
 
 app = FastAPI(title="Cascade UI API", version="0.1.0")
 app.add_middleware(
@@ -86,15 +90,16 @@ def spa_index() -> FileResponse:
     return FileResponse(index)
 
 
-@app.get("/favicon.svg")
+@app.api_route("/favicon.svg", methods=["GET", "HEAD"])
 def spa_favicon() -> Response:
-    path = _STATIC / "favicon.svg"
-    if path.is_file():
-        return FileResponse(path, media_type="image/svg+xml")
-    return Response(content=_FAVICON_SVG, media_type="image/svg+xml")
+    return Response(
+        content=_FAVICON_SVG,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
-@app.get("/favicon.ico")
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"])
 def spa_favicon_ico() -> Response:
     # Browsers often request /favicon.ico; serve the same mark as SVG.
     return spa_favicon()
