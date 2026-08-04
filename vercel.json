@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastapi",
+  "buildCommand": "python scripts/vercel_build.py",
+  "installCommand": "pip install -r requirements.txt && pip install -e .",
+  "functions": {
+    "api/server.py": {
+      "maxDuration": 60,
+      "includeFiles": "public/**"
+    }
+  }
+}

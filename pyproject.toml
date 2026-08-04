@@ -17,3 +17,7 @@ cascade = "cascade.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest"]
+ui = ["fastapi>=0.115", "uvicorn[standard]>=0.32"]
+
+[tool.vercel]
+entrypoint = "api.server:app"

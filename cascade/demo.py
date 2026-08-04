@@ -13,8 +13,9 @@ from cascade.diff_parser import load_changes
 from cascade.impact import build_impact_report
 
 DEFAULT_URN = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)"
-DEFAULT_DIFF = "examples/diffs/raw_orders_rename_user_id.json"
-DEFAULT_MODELS = "examples/models"
+_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_DIFF = str(_ROOT / "examples" / "diffs" / "raw_orders_rename_user_id.json")
+DEFAULT_MODELS = str(_ROOT / "examples" / "models")
 
 
 def run_demo(

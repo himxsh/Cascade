@@ -86,6 +86,37 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 
 Draft DataHub Skill [`breaking-change-remediation`](oss/datahub-skills/skills/breaking-change-remediation/SKILL.md) lives under [`oss/datahub-skills/`](oss/datahub-skills/) for now (in-repo only; do not open upstream until coordinated).
 
+## Interactive UI (Phase 10)
+
+Paste a schema diff → run Cascade (fixture path by default) → inspect blast radius, remediations, SQL diffs, and dry-run DataHub write-backs.
+
+```bash
+# terminal 1 — API (calls cascade/*; default source=fixture, works offline)
+pip install -e ".[ui]"
+uvicorn api.server:app --reload --port 8000
+
+# terminal 2 — Vite app (proxies /api → :8000)
+cd frontend && npm install && npm run dev
+```
+
+Open http://localhost:5173 → **Load demo diff** → **Run Cascade**.
+
+Self-check (ImpactReport shape + fixture path):
+
+```bash
+python -m unittest tests.test_ui_run -v
+```
+
+### Deploy (Vercel)
+
+One Vercel project: FastAPI (`api/server.py`) + static UI built into `public/`.
+
+```bash
+npx vercel --prod
+```
+
+Fixture path needs no secrets. Optional live DataHub: set `DATAHUB_GMS_URL` / `DATAHUB_TOKEN` in the Vercel project env.
+
 ## Architecture
 
 See [docs/](docs/) for [spec](docs/spec.md), [plan](docs/plan.md), [progress](docs/progress.md), and architecture diagrams.

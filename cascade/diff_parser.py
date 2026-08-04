@@ -105,12 +105,16 @@ def parse_diff(text: str) -> list[dict[str, Any]]:
     return all_changes
 
 
-def load_changes(path: str | Path) -> list[dict[str, Any]]:
-    text = Path(path).read_text()
+def parse_changes_text(text: str) -> list[dict[str, Any]]:
+    """Parse pasted JSON changes or a unified SQL/dbt diff."""
     stripped = text.strip()
-
-    if stripped.startswith('{') or stripped.startswith('['):
+    if not stripped:
+        return []
+    if stripped.startswith("{") or stripped.startswith("["):
         data = json.loads(text)
         return data if isinstance(data, list) else data.get("changes", [])
-
     return parse_diff(text)
+
+
+def load_changes(path: str | Path) -> list[dict[str, Any]]:
+    return parse_changes_text(Path(path).read_text())
