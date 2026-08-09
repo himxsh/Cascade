@@ -1,17 +1,27 @@
+"""Agent: choose remediation strategy + rewrite downstream SQL.
+
+When LLM_API_KEY / OPENAI_API_KEY is set, the LLM owns strategy + SQL.
+Deterministic demo agent is fallback on missing key, timeout, parse failure,
+or schema-gate rejection of LLM SQL.
+"""
+
 from __future__ import annotations
 
 import json
 import os
 import re
+import sys
+import time
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError, HTTPError
 from urllib.request import Request, urlopen
 
 from cascade.schema_gate import validate_sql
 from cascade.rewrite import rename_column
 
-
-_LLM_CHAT_URL_RE = re.compile(r'^(https?://.+)/chat/completions$')
+_LLM_CHAT_URL_RE = re.compile(r"^(https?://.+)/chat/completions$")
+_DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def _model_path_for_urn(urn: str, models_dir: str | Path) -> Path | None:
@@ -33,22 +43,8 @@ def _get_new_column_names(changes: list[dict[str, Any]]) -> set[str]:
     return names
 
 
-def _demo_choose_and_rewrite(
-    changes: list[dict[str, Any]],
-    catalog: dict[str, Any],
-    models_dir: str | Path | None,
-    source_urn: str | None,
-) -> list[dict[str, Any]]:
-    remediations: list[dict[str, Any]] = []
+def _all_downstream_urns(catalog: dict[str, Any], source_urn: str | None) -> list[str]:
     downstream_map = catalog.get("downstream_map", {})
-    datasets_by_urn = catalog.get("datasets_by_urn", {})
-
-    renames: dict[str, str] = {}
-    has_field_removed = any(c["type"] == "FIELD_REMOVED" and not c.get("to") for c in changes)
-    for c in changes:
-        if c["type"] == "FIELD_RENAMED" and c.get("from") and c.get("to"):
-            renames[c["from"]] = c["to"]
-
     all_downstream: list[str] = []
     seen: set[str] = set()
     queue = list(downstream_map.get(source_urn or "", []))
@@ -63,18 +59,46 @@ def _demo_choose_and_rewrite(
                 seen.add(child)
                 all_downstream.append(child)
                 queue.append(child)
+    return all_downstream
 
-    new_cols = _get_new_column_names(changes)
+
+def _allowed_columns(
+    catalog: dict[str, Any], urn: str, changes: list[dict[str, Any]]
+) -> set[str]:
+    datasets_by_urn = catalog.get("datasets_by_urn", {})
+    ds = datasets_by_urn.get(urn, {})
+    schema_fields = {f["name"] for f in ds.get("schema_fields", [])}
     all_catalog_cols: set[str] = set()
-    for ds in datasets_by_urn.values():
-        for f in ds.get("schema_fields", []):
+    for d in datasets_by_urn.values():
+        for f in d.get("schema_fields", []):
             all_catalog_cols.add(f["name"])
+    return schema_fields | _get_new_column_names(changes) | all_catalog_cols
+
+
+def _log_agent(msg: str) -> None:
+    print(f"cascade: {msg}", file=sys.stderr)
+
+
+def _demo_choose_and_rewrite(
+    changes: list[dict[str, Any]],
+    catalog: dict[str, Any],
+    models_dir: str | Path | None,
+    source_urn: str | None,
+) -> list[dict[str, Any]]:
+    remediations: list[dict[str, Any]] = []
+    datasets_by_urn = catalog.get("datasets_by_urn", {})
+
+    renames: dict[str, str] = {}
+    has_field_removed = any(c["type"] == "FIELD_REMOVED" and not c.get("to") for c in changes)
+    for c in changes:
+        if c["type"] == "FIELD_RENAMED" and c.get("from") and c.get("to"):
+            renames[c["from"]] = c["to"]
+
+    all_downstream = _all_downstream_urns(catalog, source_urn)
     handled_urns: set[str] = set()
 
     for urn in all_downstream:
-        ds = datasets_by_urn.get(urn, {})
-        schema_fields = {f["name"] for f in ds.get("schema_fields", [])}
-        allowed_base = schema_fields | new_cols | all_catalog_cols
+        allowed_base = _allowed_columns(catalog, urn, changes)
 
         for old_name, new_name in renames.items():
             model_path = _model_path_for_urn(urn, models_dir) if models_dir else None
@@ -93,6 +117,7 @@ def _demo_choose_and_rewrite(
                                 f"{model_path.name} failed schema gate; "
                                 f"falling back to adapter view"
                             ),
+                            "agent": "deterministic",
                         })
                         handled_urns.add(urn)
                         continue
@@ -107,6 +132,7 @@ def _demo_choose_and_rewrite(
                             f"{new_name} to match upstream schema change"
                         ),
                         "rewritten_sql": rewritten,
+                        "agent": "deterministic",
                     })
                     handled_urns.add(urn)
             else:
@@ -118,6 +144,7 @@ def _demo_choose_and_rewrite(
                         f"recommend adapter view to alias {old_name}->{new_name} "
                         f"while downstream migrates"
                     ),
+                    "agent": "deterministic",
                 })
                 handled_urns.add(urn)
 
@@ -131,6 +158,7 @@ def _demo_choose_and_rewrite(
                         f"FIELD_REMOVED with no replacement column; "
                         f"mark downstream node {urn} as deprecated"
                     ),
+                    "agent": "deterministic",
                 })
                 handled_urns.add(urn)
 
@@ -141,11 +169,15 @@ def _call_llm(
     changes: list[dict[str, Any]],
     downstream_info: list[dict[str, Any]],
     model_sql: str | None,
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Returns (parsed_json_or_None, meta). Meta never includes secrets."""
     api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    base_url = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
+    base_url = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    model = os.environ.get("LLM_MODEL", _DEFAULT_MODEL)
+    meta: dict[str, Any] = {"model": model, "latency_ms": None, "ok": False, "error": None}
     if not api_key:
-        return None
+        meta["error"] = "no_api_key"
+        return None, meta
 
     prompt = (
         "You are a schema migration assistant. Given a schema change and a downstream "
@@ -159,7 +191,7 @@ def _call_llm(
         prompt += f"Model SQL:\n{model_sql}\n"
 
     body = json.dumps({
-        "model": "gpt-4o-mini",
+        "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
     }).encode()
@@ -173,79 +205,129 @@ def _call_llm(
         },
         method="POST",
     )
+    t0 = time.monotonic()
     try:
-        resp = urlopen(req, timeout=30)
-        data = json.loads(resp.read().decode())
+        with urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+        meta["latency_ms"] = int((time.monotonic() - t0) * 1000)
         text = data["choices"][0]["message"]["content"]
         cleaned = text.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1]
             cleaned = cleaned.rsplit("```", 1)[0]
-        return json.loads(cleaned.strip())
-    except Exception:
+        parsed = json.loads(cleaned.strip())
+        meta["ok"] = True
+        return parsed, meta
+    except (TimeoutError, URLError, HTTPError, json.JSONDecodeError, KeyError, IndexError, TypeError) as e:
+        meta["latency_ms"] = int((time.monotonic() - t0) * 1000)
+        meta["error"] = type(e).__name__
+        return None, meta
+    except Exception as e:
+        meta["latency_ms"] = int((time.monotonic() - t0) * 1000)
+        meta["error"] = type(e).__name__
+        return None, meta
+
+
+def _rem_from_llm(
+    urn: str,
+    llm: dict[str, Any],
+    *,
+    model_path: Path | None,
+    allowed: set[str],
+) -> dict[str, Any] | None:
+    strategy = llm.get("strategy")
+    if strategy not in ("rewrite", "adapter_view", "deprecate"):
         return None
+    rationale = (llm.get("rationale") or "").strip() or "LLM remediation"
+    if strategy == "rewrite":
+        rewritten = llm.get("sql")
+        if not rewritten or not model_path:
+            return None
+        validate_sql(rewritten, allowed)  # raises ValueError → caller falls back
+        return {
+            "urn": urn,
+            "path": str(model_path),
+            "strategy": "rewrite",
+            "rationale": rationale,
+            "rewritten_sql": rewritten,
+            "agent": "llm",
+        }
+    return {
+        "urn": urn,
+        "strategy": strategy,
+        "rationale": rationale,
+        "agent": "llm",
+    }
 
 
-# ponytail: OpenAI-compatible HTTP; swap provider via LLM_BASE_URL
+# ponytail: OpenAI-compatible HTTP; swap provider via LLM_BASE_URL / LLM_MODEL
 def choose_and_rewrite(
     changes: list[dict[str, Any]],
     catalog: dict[str, Any],
     models_dir: str | Path | None = None,
     source_urn: str | None = None,
 ) -> list[dict[str, Any]]:
-    remediations = _demo_choose_and_rewrite(changes, catalog, models_dir, source_urn)
-
+    demo = _demo_choose_and_rewrite(changes, catalog, models_dir, source_urn)
     api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        return remediations
+        _log_agent("agent=deterministic reason=no_api_key")
+        return demo
 
-    all_downstream: list[str] = []
-    downstream_map = catalog.get("downstream_map", {})
-    seen: set[str] = set()
-    queue = list(downstream_map.get(source_urn or "", []))
-    for urn in queue:
-        if urn not in seen:
-            seen.add(urn)
-            all_downstream.append(urn)
-    while queue:
-        current = queue.pop(0)
-        for child in downstream_map.get(current, []):
-            if child not in seen:
-                seen.add(child)
-                all_downstream.append(child)
-                queue.append(child)
+    demo_by_urn: dict[str, list[dict[str, Any]]] = {}
+    for rem in demo:
+        demo_by_urn.setdefault(rem["urn"], []).append(rem)
 
-    new_cols = _get_new_column_names(changes)
-    datasets_by_urn = catalog.get("datasets_by_urn", {})
-    all_catalog_cols: set[str] = set()
-    for ds in datasets_by_urn.values():
-        for f in ds.get("schema_fields", []):
-            all_catalog_cols.add(f["name"])
+    out: list[dict[str, Any]] = []
+    used_llm = False
+    for urn in _all_downstream_urns(catalog, source_urn):
+        fallback = demo_by_urn.get(urn) or []
+        model_path = _model_path_for_urn(urn, models_dir) if models_dir else None
+        model_sql = model_path.read_text() if model_path else None
+        allowed = _allowed_columns(catalog, urn, changes)
+        ds = catalog.get("datasets_by_urn", {}).get(urn, {})
+        schema_fields = [f["name"] for f in ds.get("schema_fields", [])]
+        downstream_info = [{"urn": urn, "schema_fields": schema_fields}]
 
-    for i, rem in enumerate(remediations):
-        if rem["strategy"] != "rewrite":
+        llm, meta = _call_llm(changes, downstream_info, model_sql)
+        if llm is None:
+            _log_agent(
+                f"agent=deterministic fallback urn={urn} "
+                f"model={meta.get('model')} latency_ms={meta.get('latency_ms')} "
+                f"reason={meta.get('error') or 'llm_failed'}"
+            )
+            out.extend(fallback)
             continue
-        path_str = rem.get("path")
-        model_sql = Path(path_str).read_text() if path_str else None
-        urn = rem.get("urn", "")
-        ds = datasets_by_urn.get(urn, {})
-        schema_fields = {f["name"] for f in ds.get("schema_fields", [])}
-        allowed_base = schema_fields | new_cols | all_catalog_cols
 
-        downstream_info = [{"urn": urn, "schema_fields": list(schema_fields)}]
-
-        llm_result = _call_llm(changes, downstream_info, model_sql)
-        if llm_result is None:
+        try:
+            rem = _rem_from_llm(urn, llm, model_path=model_path, allowed=allowed)
+        except ValueError:
+            _log_agent(
+                f"agent=deterministic fallback urn={urn} "
+                f"model={meta.get('model')} latency_ms={meta.get('latency_ms')} "
+                f"reason=schema_gate"
+            )
+            out.extend(fallback)
             continue
-        strategy = llm_result.get("strategy")
-        if strategy == "rewrite":
-            rewritten = llm_result.get("sql")
-            if rewritten:
-                try:
-                    validate_sql(rewritten, allowed_base)
-                    rem["rewritten_sql"] = rewritten
-                    rem["rationale"] = llm_result.get("rationale", rem["rationale"])
-                except ValueError:
-                    pass
 
-    return remediations
+        if rem is None:
+            _log_agent(
+                f"agent=deterministic fallback urn={urn} "
+                f"model={meta.get('model')} latency_ms={meta.get('latency_ms')} "
+                f"reason=bad_llm_payload"
+            )
+            out.extend(fallback)
+            continue
+
+        used_llm = True
+        _log_agent(
+            f"agent=llm urn={urn} strategy={rem['strategy']} "
+            f"model={meta.get('model')} latency_ms={meta.get('latency_ms')}"
+        )
+        out.append(rem)
+
+    if not out:
+        _log_agent("agent=deterministic reason=llm_empty")
+        return demo
+    if not used_llm:
+        _log_agent("agent=deterministic reason=all_nodes_fell_back")
+    return out

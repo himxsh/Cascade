@@ -1,9 +1,11 @@
 import contextlib
 import io
 import json
+import os
 import shutil
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cascade.agent import choose_and_rewrite
 from cascade.cli import cmd_generate
@@ -119,6 +121,81 @@ class TestDemoAgent(unittest.TestCase):
             source_urn=RAW_URN,
         )
         self.assertGreater(len(remediations), 0)
+        self.assertTrue(all(r.get("agent") == "deterministic" for r in remediations))
+
+
+class TestLlmPrimary(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.catalog = load_catalog(FIXTURE)
+
+    def test_llm_owns_rewrite_when_keyed(self):
+        changes = [
+            {"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id",
+             "detected_by": "heuristic"}
+        ]
+        llm_sql = (MODELS_DIR / "fct_orders.sql").read_text().replace("user_id", "customer_id")
+        fake = {
+            "strategy": "rewrite",
+            "rationale": "LLM: rename user_id to customer_id in fct_orders",
+            "sql": llm_sql,
+        }
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
+            with mock.patch("cascade.agent._call_llm", return_value=(fake, {
+                "model": "gpt-4o-mini", "latency_ms": 12, "ok": True, "error": None,
+            })):
+                remediations = choose_and_rewrite(
+                    changes=changes,
+                    catalog=self.catalog,
+                    models_dir=str(MODELS_DIR),
+                    source_urn=RAW_URN,
+                )
+        fct = next(r for r in remediations if r.get("urn") == FCT_URN and r["strategy"] == "rewrite")
+        self.assertEqual(fct["agent"], "llm")
+        self.assertIn("LLM:", fct["rationale"])
+        self.assertIn("customer_id", fct["rewritten_sql"])
+
+    def test_llm_schema_gate_falls_back(self):
+        changes = [
+            {"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id",
+             "detected_by": "heuristic"}
+        ]
+        fake = {
+            "strategy": "rewrite",
+            "rationale": "bad invent",
+            "sql": "SELECT totally_invented_col FROM t",
+        }
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
+            with mock.patch("cascade.agent._call_llm", return_value=(fake, {
+                "model": "gpt-4o-mini", "latency_ms": 5, "ok": True, "error": None,
+            })):
+                remediations = choose_and_rewrite(
+                    changes=changes,
+                    catalog=self.catalog,
+                    models_dir=str(MODELS_DIR),
+                    source_urn=RAW_URN,
+                )
+        fct = next(r for r in remediations if r.get("urn") == FCT_URN and r["strategy"] == "rewrite")
+        self.assertEqual(fct["agent"], "deterministic")
+        self.assertIn("customer_id", fct["rewritten_sql"])
+
+    def test_llm_timeout_falls_back(self):
+        changes = [
+            {"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id",
+             "detected_by": "heuristic"}
+        ]
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
+            with mock.patch("cascade.agent._call_llm", return_value=(None, {
+                "model": "gpt-4o-mini", "latency_ms": 30000, "ok": False, "error": "TimeoutError",
+            })):
+                remediations = choose_and_rewrite(
+                    changes=changes,
+                    catalog=self.catalog,
+                    models_dir=str(MODELS_DIR),
+                    source_urn=RAW_URN,
+                )
+        self.assertTrue(all(r.get("agent") == "deterministic" for r in remediations))
+        self.assertTrue(any(r["strategy"] == "rewrite" for r in remediations))
 
 
 class TestGenerateCLI(unittest.TestCase):

@@ -76,11 +76,17 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 
 | Variable | Required for | Notes |
 |----------|----------------|-------|
-| `DATAHUB_GMS_URL` / `DATAHUB_TOKEN` | `--source live` / live write-back | GMS GraphQL + optional Bearer |
-| `CASCADE_WRITEBACK=1` | Live DataHub/ML tags | Default is dry-run JSON artifacts |
+| `DATAHUB_GMS_URL` / `DATAHUB_TOKEN` | `--source live` / live write-back | HTTPS GMS for Actions; localhost only for laptop |
+| `CASCADE_WRITEBACK=1` | Live DataHub/ML tags + docs | Default unset = dry-run JSON; never set on untrusted CI |
 | `GITHUB_TOKEN` / `GITHUB_REPOSITORY` / `CASCADE_PR_NUMBER` | Live PR comment | Action sets these on `pull_request` |
 | `CASCADE_DOWNSTREAM_HEAD` / `CASCADE_DOWNSTREAM_BASE` | Live downstream PR | Head must already contain rewritten files |
-| `LLM_API_KEY` | Optional LLM rewrite | Demo agent used when unset |
+| `LLM_API_KEY` or `OPENAI_API_KEY` | LLM-primary strategy/rewrite | Deterministic demo agent when unset |
+| `LLM_BASE_URL` | Optional OpenAI-compatible base | Default `https://api.openai.com/v1` |
+| `LLM_MODEL` | Optional chat model id | Default `gpt-4o-mini` |
+
+**LLM cost / latency:** When a key is set, Cascade calls the chat API once per downstream node (timeout 30s). Expect ~1–3s and a fraction of a cent per node on `gpt-4o-mini`; failures (timeout/parse/schema-gate) fall back to the deterministic rewrite with a stderr notice. Unset the key for offline/CI deterministic runs.
+
+Repo secrets for live Actions: `DATAHUB_GMS_URL`, `DATAHUB_TOKEN`, `LLM_API_KEY`. Smoke job: [`.github/workflows/gms-smoke.yml`](.github/workflows/gms-smoke.yml).
 
 ## Open-source Skill
 

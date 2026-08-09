@@ -7,7 +7,6 @@ from pathlib import Path
 
 from cascade.agent import choose_and_rewrite
 from cascade.apply import run_apply
-from cascade.datahub_fixture import load_catalog
 from cascade.datahub_live import resolve_catalog
 from cascade.demo import DEFAULT_DIFF, DEFAULT_MODELS, DEFAULT_URN, run_demo
 from cascade.impact import build_impact_report
@@ -55,7 +54,7 @@ def cmd_generate(args: argparse.Namespace) -> None:
     report_data = json.loads(Path(args.report).read_text())
     source_urn = report_data.get("source_urn", "")
     changes = report_data.get("changes", [])
-    catalog = load_catalog(args.fixture)
+    catalog = resolve_catalog(getattr(args, "source", "fixture"), source_urn or None, args.fixture)
     models_dir = args.models_dir or "examples/models"
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -85,7 +84,7 @@ def cmd_apply(args: argparse.Namespace) -> None:
     if args.generate or not report_data.get("remediations"):
         source_urn = report_data.get("source_urn", "")
         changes = report_data.get("changes", [])
-        catalog = load_catalog(args.fixture)
+        catalog = resolve_catalog(getattr(args, "source", "fixture"), source_urn or None, args.fixture)
         models_dir = args.models_dir or "examples/models"
         report_data["remediations"] = choose_and_rewrite(
             changes=changes,
@@ -143,6 +142,12 @@ def main() -> None:
     gen_p.add_argument("--out", required=True, help="Output directory for rewritten SQL files")
     gen_p.add_argument("--models-dir", help="Directory with downstream model SQL files")
     gen_p.add_argument("--fixture", help="Override fixture path")
+    gen_p.add_argument(
+        "--source",
+        choices=["fixture", "live", "auto"],
+        default="fixture",
+        help="Catalog source for schema gate / rewrite (default fixture)",
+    )
     gen_p.set_defaults(func=cmd_generate)
 
     apply_p = sub.add_parser(
@@ -153,6 +158,12 @@ def main() -> None:
     apply_p.add_argument("--out", required=True, help="Artifact output directory")
     apply_p.add_argument("--models-dir", help="Directory with downstream model SQL files")
     apply_p.add_argument("--fixture", help="Override fixture path")
+    apply_p.add_argument(
+        "--source",
+        choices=["fixture", "live", "auto"],
+        default="fixture",
+        help="Catalog source when --generate / remediations missing (default fixture)",
+    )
     apply_p.add_argument(
         "--generate",
         action="store_true",

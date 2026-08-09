@@ -23,7 +23,7 @@ RAW_URN = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PR
 def _strip_rewritten_sql(remediations: list[dict]) -> list[dict]:
     out = []
     for rem in remediations:
-        cleaned = {k: v for k, v in rem.items() if k != "rewritten_sql"}
+        cleaned = {k: v for k, v in rem.items() if k not in ("rewritten_sql", "agent")}
         out.append(cleaned)
     return out
 
