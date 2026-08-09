@@ -1,7 +1,7 @@
 name: Cascade Act
 
 # fixture-ci: offline golden path (hardcoded example diff) — no GMS secrets needed.
-# pr-impact: real PR base…head SQL/model/schema diff → impact + comment.
+# pr-impact: real PR base…head SQL/model/schema diff → impact + remediation PR + comment.
 # Live GMS when DATAHUB_GMS_URL secret is set; else --source auto falls back to fixture.
 
 on:
@@ -60,8 +60,14 @@ jobs:
           path: artifacts/fixture/
 
   pr-impact:
-    if: github.event_name == 'pull_request'
+    # Skip Cascade's own remediation PRs (avoid feedback loops).
+    if: >
+      github.event_name == 'pull_request' &&
+      !startsWith(github.head_ref, 'cascade/remediation/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,7 +83,6 @@ jobs:
           mkdir -p artifacts/pr
           BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.event.pull_request.head.sha }}"
-          # Filter to SQL / models / schema.yml (stdlib-ish shell; no cascade.yml YAML dep)
           mapfile -t FILES < <(
             git diff --name-only "${BASE}...${HEAD}" \
               | grep -E '\.sql$|(^|/)models/|schema\.ya?ml$' || true
@@ -102,7 +107,6 @@ jobs:
           LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
           LLM_MODEL: ${{ vars.LLM_MODEL }}
         run: |
-          # live when GMS secret present; auto otherwise (fixture fallback)
           if [ -n "${DATAHUB_GMS_URL:-}" ]; then
             SOURCE=live
           else
@@ -114,17 +118,18 @@ jobs:
             --generate \
             --out artifacts/pr/generate \
             > artifacts/pr/impact_stdout.json
-      - name: Apply dry-run + comment body
+      - name: Apply (comment + remediation PR)
         if: steps.diff.outputs.empty != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           CASCADE_PR_NUMBER: ${{ github.event.pull_request.number }}
+          CASCADE_OPEN_DOWNSTREAM_PR: "1"
+          CASCADE_DOWNSTREAM_BASE: ${{ github.event.pull_request.base.ref }}
         run: |
           cascade apply \
             --report artifacts/pr/generate/impact_report.json \
             --out artifacts/pr/apply \
-            --mark-migrated \
             --pr-number "${{ github.event.pull_request.number }}"
       - name: Upload PR artifacts
         if: steps.diff.outputs.empty != 'true'
@@ -132,16 +137,3 @@ jobs:
         with:
           name: cascade-pr
           path: artifacts/pr/
-      - name: Post PR comment
-        if: steps.diff.outputs.empty != 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          CASCADE_PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from cascade.github_act import post_pr_comment
-          body = Path("artifacts/pr/apply/pr_comment.md").read_text()
-          print(post_pr_comment(body))
-          PY

@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 
-def build_pr_comment(report: dict[str, Any]) -> str:
+def build_pr_comment(
+    report: dict[str, Any],
+    *,
+    remediation_pr_url: str | None = None,
+) -> str:
     source = report.get("source_urn", "(unknown)")
     severity = report.get("severity", "unknown")
     changes = report.get("changes") or []
@@ -70,6 +74,9 @@ def build_pr_comment(report: dict[str, Any]) -> str:
                 f"- `{m.get('model_urn')}` via `{m.get('via_feature')}`"
                 f" → `{m.get('action')}`"
             )
+
+    if remediation_pr_url:
+        lines.extend(["", f"**Remediation PR:** {remediation_pr_url}"])
 
     lines.append("")
     return "\n".join(lines)

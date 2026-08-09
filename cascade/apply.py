@@ -42,21 +42,27 @@ def run_apply(
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    comment = build_pr_comment(report)
-    comment_result = post_pr_comment(comment, pr_number=pr_number, out_dir=out)
-
     files = remediations_to_files(report.get("remediations") or [])
     reviewers = reviewers_from_report(report)
+    source_urn = report.get("source_urn", "")
+
+    # Draft comment first (no remediation URL yet) for the downstream PR body.
+    draft_comment = build_pr_comment(report)
     downstream_result = open_or_update_downstream_pr(
         files,
         title="Cascade: remediate downstream schema break",
-        body=comment,
+        body=draft_comment,
         out_dir=out,
         reviewers=reviewers,
+        upstream_pr=pr_number,
+        source_urn=source_urn or None,
     )
 
+    remediation_url = downstream_result.get("url") if not downstream_result.get("dry_run") else None
+    comment = build_pr_comment(report, remediation_pr_url=remediation_url)
+    comment_result = post_pr_comment(comment, pr_number=pr_number, out_dir=out)
+
     plan_doc = comment
-    source_urn = report.get("source_urn", "")
     dh_result = write_dataset_breaking(source_urn, plan_doc=plan_doc, out_dir=out)
 
     ml_results = []
