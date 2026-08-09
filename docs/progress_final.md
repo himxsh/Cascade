@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-09  
 **Tracking:** [final_plan.md](./final_plan.md)  
-**Current phase:** Phase 4 — Automatic remediation PR  
-**Overall:** Phases 0–3 done (local GMS; PR Action uses real diff + fixture-ci). Next: auto remediation PR.
+**Current phase:** Phase 5 — Production hardening  
+**Overall:** Phases 0–4 done. Next: hardening / OSS / submit assets.
 
 Original hackathon MVP progress stays in [progress.md](./progress.md). This file tracks only the production loop.
 
@@ -78,10 +78,10 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Git Data API branch/commit/PR | [ ] | Still needs `CASCADE_DOWNSTREAM_HEAD` |
-| Idempotent remediations branch | [ ] | |
-| Reviewers from owners | [~] | Dry-run reviewers work |
-| `mark_migrated` on merge | [ ] | |
+| Git Data API branch/commit/PR | [x] | `commit_files_to_branch` + open/update; gated by `CASCADE_OPEN_DOWNSTREAM_PR` |
+| Idempotent remediations branch | [x] | `cascade/remediation/{upstream_pr}` |
+| Reviewers from owners | [x] | Best-effort request; invalid logins ignored |
+| `mark_migrated` on merge | [x] | `cascade-migrated.yml` on remediation PR merge |
 
 ---
 
@@ -127,11 +127,11 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 - [x] LLM primary when keyed; deterministic fallback only
 - [x] Schema gate rejects invented columns
 - [x] Source PR blast-radius comment (pr-impact + fixture-ci)
-- [ ] Downstream remediation PR auto create/update
+- [x] Downstream remediation PR auto create/update (`CASCADE_OPEN_DOWNSTREAM_PR`)
 - [x] Real DataHub write-back aspects (verified on laptop UI)
-- [ ] Merge flips pending → `cascade:migrated`
+- [x] Merge flips pending → `cascade:migrated` (`cascade-migrated.yml`)
 - [x] Dry-run default; live gated by secrets
-- [ ] Idempotent re-runs
+- [~] Idempotent re-runs (same upstream PR → same remediation branch/PR)
 - [x] CI eval stays green (fixture)
 - [x] README secrets / URN mapping (`.cascade/config.json`)
 
@@ -171,7 +171,14 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 - `.cascade/config.json` path→URN; `cascade/config.py` + CLI optional `--urn`.
 - `pr-impact` job: real `git diff` base…head → `load_changes` / patch parser; separate `fixture-ci`.
 - dotenv auto-load kept for laptop CLI/API.
+- Merged as PR #15.
+
+### 2026-08-09 — Phase 4
+
+- Git Data API: branch `cascade/remediation/{pr}` + commit rewritten SQL + open/update PR.
+- `CASCADE_OPEN_DOWNSTREAM_PR=1` happy path; `CASCADE_DOWNSTREAM_HEAD` optional override.
+- Source comment + DataHub plan link remediation URL; `cascade-migrated.yml` on merge.
 
 ### 2026-08-09 — next
 
-- Phase 4: automatic remediation PR (Git Data API; drop happy-path `CASCADE_DOWNSTREAM_HEAD`).
+- Phase 5 hardening (policy check, idempotent comments, audit dir).

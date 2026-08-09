@@ -41,6 +41,8 @@ class TestComment(unittest.TestCase):
         self.assertIn("rewrite", md)
         self.assertIn("rewriting to customer_id", md)
         self.assertIn("retrain-suggested", md)
+        with_url = build_pr_comment(report, remediation_pr_url="https://github.com/o/r/pull/9")
+        self.assertIn("**Remediation PR:** https://github.com/o/r/pull/9", with_url)
 
 
 class TestGitHubAct(unittest.TestCase):
@@ -82,6 +84,78 @@ class TestGitHubAct(unittest.TestCase):
             owner_urns_to_reviewers(["urn:li:corpuser:alice", "urn:li:corpuser:bob"]),
             ["alice", "bob"],
         )
+
+    def test_remediation_branch_name(self):
+        from cascade.github_act import remediation_branch_name
+        self.assertEqual(remediation_branch_name(42), "cascade/remediation/42")
+        self.assertEqual(remediation_branch_name(None), "cascade/remediation/manual")
+
+    def test_extract_source_urn(self):
+        from cascade.github_act import extract_source_urn_from_pr_body
+        body = "## Cascade\n\n**Source:** `urn:li:dataset:x`\n"
+        self.assertEqual(extract_source_urn_from_pr_body(body), "urn:li:dataset:x")
+        marked = "hello\n<!-- cascade:source_urn=urn:li:dataset:y -->\n"
+        self.assertEqual(extract_source_urn_from_pr_body(marked), "urn:li:dataset:y")
+
+    def test_git_data_api_open_mocked(self):
+        from cascade.github_act import open_or_update_downstream_pr
+
+        calls: list[tuple[str, str]] = []
+
+        def fake_api(method: str, path: str, body=None):
+            calls.append((method, path))
+            if method == "GET" and path.startswith("/git/ref/heads/"):
+                if "cascade" in path:
+                    raise RuntimeError("GitHub API GET failed: 404 not found")
+                return {"object": {"sha": "baseSha"}}
+            if method == "GET" and path.startswith("/git/commits/"):
+                return {"tree": {"sha": "treeSha"}}
+            if method == "POST" and path == "/git/blobs":
+                return {"sha": "blobSha"}
+            if method == "POST" and path == "/git/trees":
+                return {"sha": "newTree"}
+            if method == "POST" and path == "/git/commits":
+                return {"sha": "commitSha"}
+            if method == "POST" and path == "/git/refs":
+                return {"ref": "refs/heads/cascade/remediation/7"}
+            if method == "GET" and path.startswith("/pulls?"):
+                return []  # type: ignore[return-value]
+            if method == "POST" and path == "/pulls":
+                return {"html_url": "https://github.com/o/r/pull/99", "number": 99}
+            if method == "POST" and "requested_reviewers" in path:
+                return {"requested": True}
+            raise AssertionError(f"unexpected {method} {path}")
+
+        def fake_list(method: str, path: str, body=None):
+            calls.append((method, path))
+            return []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                **os.environ,
+                "GITHUB_TOKEN": "t",
+                "GITHUB_REPOSITORY": "o/r",
+                "CASCADE_OPEN_DOWNSTREAM_PR": "1",
+            }
+            env.pop("CASCADE_DOWNSTREAM_HEAD", None)
+            with mock.patch.dict(os.environ, env, clear=True):
+                with mock.patch("cascade.github_act._github_api", side_effect=fake_api):
+                    with mock.patch("cascade.github_act._github_api_list", side_effect=fake_list):
+                        result = open_or_update_downstream_pr(
+                            {"examples/models/fct_orders.sql": "SELECT 1\n"},
+                            out_dir=tmp,
+                            reviewers=["alice"],
+                            upstream_pr=7,
+                            source_urn="urn:li:dataset:x",
+                        )
+            body = Path(tmp, "downstream_pr.md").read_text()
+            self.assertFalse(result["dry_run"])
+            self.assertTrue(result["opened"])
+            self.assertEqual(result["url"], "https://github.com/o/r/pull/99")
+            self.assertEqual(result["mode"], "git_data_api")
+            self.assertEqual(result["branch"], "cascade/remediation/7")
+            self.assertIn("cascade:source_urn=urn:li:dataset:x", body)
+            self.assertTrue(any(m == "POST" and p == "/pulls" for m, p in calls))
 
 
 class TestDataHubWrite(unittest.TestCase):
@@ -165,7 +239,7 @@ class TestApply(unittest.TestCase):
         report = json.loads(GOLDEN_REPORT.read_text())
         report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
         with tempfile.TemporaryDirectory() as tmp:
-            env = {k: v for k, v in os.environ.items() if k not in ("GITHUB_TOKEN", "CASCADE_WRITEBACK")}
+            env = {k: v for k, v in os.environ.items() if k not in ("GITHUB_TOKEN", "CASCADE_WRITEBACK", "CASCADE_OPEN_DOWNSTREAM_PR")}
             with mock.patch.dict(os.environ, env, clear=True):
                 summary = run_apply(report, out_dir=tmp, mark_lifecycle=True)
             self.assertTrue(Path(tmp, "pr_comment.md").exists())

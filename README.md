@@ -57,7 +57,9 @@ cascade apply --report /tmp/cascade-out/impact_report.json --out /tmp/cascade-ap
 
 GitHub Action [`.github/workflows/cascade.yml`](.github/workflows/cascade.yml) has two jobs:
 - **fixture-ci** — hardcoded golden diff, no GMS secrets (always green offline path)
-- **pr-impact** — on `pull_request`, `git diff` base…head for `*.sql` / `models/` / `schema.yml` → `cascade impact` (live GMS when `DATAHUB_GMS_URL` is set, else auto→fixture) → apply dry-run → PR comment
+- **pr-impact** — on `pull_request`, `git diff` base…head for `*.sql` / `models/` / `schema.yml` → `cascade impact` (live GMS when `DATAHUB_GMS_URL` is set, else auto→fixture) → apply → **remediation PR** (`cascade/remediation/{n}`) + source PR comment
+
+On remediation merge, [`.github/workflows/cascade-migrated.yml`](.github/workflows/cascade-migrated.yml) calls `mark_migrated` (live when GMS secrets exist).
 
 Map repo paths to DataHub URNs in [`.cascade/config.json`](.cascade/config.json) (or pass `--urn` / set `CASCADE_SOURCE_URN` / repo variable `CASCADE_SOURCE_URN`).
 
@@ -84,7 +86,8 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 | `CASCADE_SOURCE_URN` | Optional URN when config mapping misses | Also repo Actions variable `CASCADE_SOURCE_URN` |
 | `CASCADE_WRITEBACK=1` | Live DataHub/ML tags + docs | Default unset = dry-run JSON; never set on untrusted CI |
 | `GITHUB_TOKEN` / `GITHUB_REPOSITORY` / `CASCADE_PR_NUMBER` | Live PR comment | Action sets these on `pull_request` |
-| `CASCADE_DOWNSTREAM_HEAD` / `CASCADE_DOWNSTREAM_BASE` | Live downstream PR | Head must already contain rewritten files |
+| `CASCADE_DOWNSTREAM_HEAD` / `CASCADE_DOWNSTREAM_BASE` | Live downstream PR (override) | Optional pre-pushed head; prefer `CASCADE_OPEN_DOWNSTREAM_PR` |
+| `CASCADE_OPEN_DOWNSTREAM_PR=1` | Auto remediation PR via Git Data API | Action `pr-impact` sets this; creates `cascade/remediation/{pr}` |
 | `LLM_API_KEY` or `OPENAI_API_KEY` | LLM-primary strategy/rewrite | Deterministic demo agent when unset |
 | `LLM_BASE_URL` | Optional OpenAI-compatible base | Default `https://api.openai.com/v1` |
 | `LLM_MODEL` | Optional chat model id | Default `gpt-4o-mini` |

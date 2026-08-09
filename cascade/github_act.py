@@ -5,10 +5,17 @@ from __future__ import annotations
 import difflib
 import json
 import os
+import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+
+def _enc_ref(branch: str) -> str:
+    """URL-encode branch names that contain '/' for Git refs API."""
+    return urllib.parse.quote(branch, safe="")
 
 
 def _github_api(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -38,6 +45,23 @@ def _github_api(method: str, path: str, body: dict[str, Any] | None = None) -> d
     except urllib.error.HTTPError as e:
         detail = e.read().decode() if e.fp else str(e)
         raise RuntimeError(f"GitHub API {method} {path} failed: {e.code} {detail}") from e
+
+
+def _github_api_list(method: str, path: str, body: dict[str, Any] | None = None) -> list[Any]:
+    result = _github_api(method, path, body)
+    if isinstance(result, list):
+        return result
+    return []
+
+
+def _truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
+def remediation_branch_name(upstream_pr: int | None) -> str:
+    if upstream_pr and upstream_pr > 0:
+        return f"cascade/remediation/{upstream_pr}"
+    return "cascade/remediation/manual"
 
 
 def write_comment_artifact(out_dir: str | Path, body: str) -> Path:
@@ -130,6 +154,104 @@ def write_downstream_artifacts(
     return meta_path
 
 
+def _repo_owner() -> str:
+    repo = os.environ.get("GITHUB_REPOSITORY") or ""
+    return repo.split("/", 1)[0]
+
+
+def commit_files_to_branch(
+    files: dict[str, str],
+    *,
+    branch: str,
+    base: str,
+    message: str,
+) -> dict[str, Any]:
+    """Create/update branch from base with file contents via Git Data API."""
+    base_ref = _github_api("GET", f"/git/ref/heads/{_enc_ref(base)}")
+    base_sha = base_ref["object"]["sha"]
+    base_commit = _github_api("GET", f"/git/commits/{base_sha}")
+    base_tree = base_commit["tree"]["sha"]
+
+    tree_items: list[dict[str, str]] = []
+    for path, content in sorted(files.items()):
+        # Normalize to repo-relative path (drop leading ./)
+        rel = path.lstrip("./")
+        blob = _github_api(
+            "POST",
+            "/git/blobs",
+            {"content": content, "encoding": "utf-8"},
+        )
+        tree_items.append({
+            "path": rel,
+            "mode": "100644",
+            "type": "blob",
+            "sha": blob["sha"],
+        })
+
+    tree = _github_api(
+        "POST",
+        "/git/trees",
+        {"base_tree": base_tree, "tree": tree_items},
+    )
+    commit = _github_api(
+        "POST",
+        "/git/commits",
+        {
+            "message": message,
+            "tree": tree["sha"],
+            "parents": [base_sha],
+        },
+    )
+    commit_sha = commit["sha"]
+
+    try:
+        _github_api("GET", f"/git/ref/heads/{_enc_ref(branch)}")
+        _github_api(
+            "PATCH",
+            f"/git/refs/heads/{_enc_ref(branch)}",
+            {"sha": commit_sha, "force": True},
+        )
+        ref_action = "updated"
+    except RuntimeError as e:
+        if " 404 " not in str(e):
+            raise
+        _github_api(
+            "POST",
+            "/git/refs",
+            {"ref": f"refs/heads/{branch}", "sha": commit_sha},
+        )
+        ref_action = "created"
+
+    return {
+        "branch": branch,
+        "base": base,
+        "commit_sha": commit_sha,
+        "ref_action": ref_action,
+        "files": sorted(files.keys()),
+    }
+
+
+def find_open_pr_for_head(branch: str) -> dict[str, Any] | None:
+    owner = _repo_owner()
+    head = urllib.parse.quote(f"{owner}:{branch}", safe="")
+    pulls = _github_api_list("GET", f"/pulls?state=open&head={head}")
+    return pulls[0] if pulls else None
+
+
+def request_pr_reviewers(pr_number: int, reviewers: list[str]) -> dict[str, Any]:
+    if not reviewers:
+        return {"requested": [], "skipped": True}
+    try:
+        return _github_api(
+            "POST",
+            f"/pulls/{pr_number}/requested_reviewers",
+            {"reviewers": reviewers},
+        )
+    except RuntimeError as e:
+        # ponytail: corpUser→login is best-effort; invalid handles must not fail Act
+        return {"requested": [], "error": str(e)}
+
+
 def open_or_update_downstream_pr(
     files: dict[str, str],
     *,
@@ -137,11 +259,22 @@ def open_or_update_downstream_pr(
     body: str = "",
     out_dir: str | Path | None = None,
     reviewers: list[str] | None = None,
+    upstream_pr: int | None = None,
+    source_urn: str | None = None,
 ) -> dict[str, Any]:
-    """Write rewritten files + unified patch; live open when CASCADE_OPEN_DOWNSTREAM_PR=1 + token."""
+    """Write rewritten files + unified patch; live open via Git Data API when enabled."""
     patch = build_downstream_patch(files) if files else ""
     reviewers = reviewers or []
-    pr_md_parts = [f"# {title}", "", body.strip(), ""]
+    upstream = upstream_pr or int(
+        os.environ.get("CASCADE_PR_NUMBER") or os.environ.get("PR_NUMBER") or "0"
+    )
+    branch = remediation_branch_name(upstream if upstream > 0 else None)
+    base = os.environ.get("CASCADE_DOWNSTREAM_BASE", "main").strip() or "main"
+
+    marker = ""
+    if source_urn:
+        marker = f"\n<!-- cascade:source_urn={source_urn} -->\n"
+    pr_md_parts = [f"# {title}", "", body.strip(), marker]
     if reviewers:
         pr_md_parts.append("## Suggested reviewers")
         pr_md_parts.append("")
@@ -162,6 +295,9 @@ def open_or_update_downstream_pr(
         "body": body,
         "files": sorted(files.keys()),
         "reviewers": reviewers,
+        "branch": branch,
+        "base": base,
+        "upstream_pr": upstream if upstream > 0 else None,
         "dry_run": True,
         "opened": False,
     }
@@ -169,37 +305,95 @@ def open_or_update_downstream_pr(
         write_downstream_artifacts(out_dir, files, meta, patch=patch, pr_body=pr_body)
 
     token = os.environ.get("GITHUB_TOKEN")
-    head = os.environ.get("CASCADE_DOWNSTREAM_HEAD", "").strip()
-    # ponytail: live PR only when a pushed head branch already has the rewrite.
-    # Default path writes patch artifacts. Upgrade (Phase 5): Git Data API branch+commit.
-    if not token or not head:
+    head_override = os.environ.get("CASCADE_DOWNSTREAM_HEAD", "").strip()
+    open_via_api = _truthy("CASCADE_OPEN_DOWNSTREAM_PR")
+
+    if not token or (not open_via_api and not head_override) or not files:
         return {
             "dry_run": True,
             "opened": False,
             "files": sorted(files.keys()),
             "reviewers": reviewers,
+            "branch": branch,
             "patch_bytes": len(patch.encode()),
         }
 
-    head_base = os.environ.get("CASCADE_DOWNSTREAM_BASE", "main")
-    pr = _github_api(
-        "POST",
-        "/pulls",
-        {
-            "title": title,
-            "body": pr_body,
-            "head": head,
-            "base": head_base,
-        },
+    # Advanced override: open PR from a pre-pushed head (no Git Data commit).
+    if head_override and not open_via_api:
+        existing = find_open_pr_for_head(head_override)
+        if existing:
+            pr = _github_api(
+                "PATCH",
+                f"/pulls/{existing['number']}",
+                {"title": title, "body": pr_body},
+            )
+            action = "updated"
+        else:
+            pr = _github_api(
+                "POST",
+                "/pulls",
+                {"title": title, "body": pr_body, "head": head_override, "base": base},
+            )
+            action = "opened"
+        request_pr_reviewers(int(pr["number"]), reviewers)
+        meta.update({
+            "dry_run": False,
+            "opened": True,
+            "url": pr.get("html_url"),
+            "number": pr.get("number"),
+            "mode": "head_override",
+            "action": action,
+            "head": head_override,
+        })
+        if out_dir is not None:
+            write_downstream_artifacts(out_dir, files, meta, patch=patch, pr_body=pr_body)
+        return meta
+
+    # Happy path: commit files to cascade/remediation/{upstream_pr}, open/update PR.
+    commit_meta = commit_files_to_branch(
+        files,
+        branch=branch,
+        base=base,
+        message=title if upstream <= 0 else f"{title} (from #{upstream})",
     )
+    existing = find_open_pr_for_head(branch)
+    if existing:
+        pr = _github_api(
+            "PATCH",
+            f"/pulls/{existing['number']}",
+            {"title": title, "body": pr_body},
+        )
+        action = "updated"
+    else:
+        pr = _github_api(
+            "POST",
+            "/pulls",
+            {"title": title, "body": pr_body, "head": branch, "base": base},
+        )
+        action = "opened"
+    review_result = request_pr_reviewers(int(pr["number"]), reviewers)
     meta.update({
         "dry_run": False,
         "opened": True,
         "url": pr.get("html_url"),
         "number": pr.get("number"),
-        "mode": "pull_request",
-        "reviewers": reviewers,
+        "mode": "git_data_api",
+        "action": action,
+        "commit": commit_meta,
+        "review_request": review_result,
     })
     if out_dir is not None:
         write_downstream_artifacts(out_dir, files, meta, patch=patch, pr_body=pr_body)
     return meta
+
+
+_SOURCE_URN_RE = re.compile(
+    r"<!--\s*cascade:source_urn=([^>]+?)\s*-->|\*\*Source:\*\*\s*`([^`]+)`",
+)
+
+
+def extract_source_urn_from_pr_body(body: str) -> str | None:
+    m = _SOURCE_URN_RE.search(body or "")
+    if not m:
+        return None
+    return (m.group(1) or m.group(2) or "").strip() or None

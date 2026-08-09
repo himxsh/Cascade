@@ -1,0 +1,55 @@
+name: Cascade migrated
+
+# When a Cascade remediation PR merges, flip DataHub pending → cascade:migrated.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  mark-migrated:
+    if: >
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'cascade/remediation/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e ".[writeback]"
+      - name: Mark migrated in DataHub
+        env:
+          DATAHUB_GMS_URL: ${{ secrets.DATAHUB_GMS_URL }}
+          DATAHUB_TOKEN: ${{ secrets.DATAHUB_TOKEN }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if [ -n "${DATAHUB_GMS_URL:-}" ]; then
+            export CASCADE_WRITEBACK=1
+          fi
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from cascade.datahub_write import mark_migrated
+          from cascade.github_act import extract_source_urn_from_pr_body
+
+          body = os.environ.get("PR_BODY") or ""
+          urn = extract_source_urn_from_pr_body(body)
+          if not urn:
+              raise SystemExit("cascade: no source URN in remediation PR body")
+          out = Path("artifacts/migrated")
+          out.mkdir(parents=True, exist_ok=True)
+          result = mark_migrated(urn, out_dir=out)
+          print(json.dumps(result, indent=2))
+          if not os.environ.get("DATAHUB_GMS_URL"):
+              print("cascade: DATAHUB_GMS_URL unset; wrote dry-run migrated artifact only")
+          PY
+      - name: Upload migrated artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cascade-migrated
+          path: artifacts/migrated/
