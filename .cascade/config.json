@@ -1,0 +1,18 @@
+{
+  "default_urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+  "models_dir": "examples/models",
+  "mappings": [
+    {
+      "path": "models/",
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)"
+    },
+    {
+      "path": "examples/models/",
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)"
+    },
+    {
+      "path": "examples/diffs/",
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)"
+    }
+  ]
+}

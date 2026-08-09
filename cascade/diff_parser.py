@@ -26,6 +26,7 @@ _ANNOTATION_RE = re.compile(
     re.IGNORECASE,
 )
 _DIFF_HEADER_RE = re.compile(r'^diff --git', re.MULTILINE)
+_GIT_PATH_RE = re.compile(r'^diff --git a/(.+?) b/(.+)$', re.MULTILINE)
 
 
 def _is_column_line(line: str) -> str | None:
@@ -103,6 +104,11 @@ def parse_diff(text: str) -> list[dict[str, Any]]:
         all_changes.extend(_parse_file_section(section))
 
     return all_changes
+
+
+def changed_paths(text: str) -> list[str]:
+    """Paths from unified `diff --git a/… b/…` headers (b/ side)."""
+    return [m.group(2) for m in _GIT_PATH_RE.finditer(text)]
 
 
 def parse_changes_text(text: str) -> list[dict[str, Any]]:
