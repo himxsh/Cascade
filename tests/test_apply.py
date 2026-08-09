@@ -15,6 +15,9 @@ from cascade.datahub_write import (
     TAG_BREAKING_PENDING,
     TAG_MIGRATED,
     TAG_RETRAIN,
+    aspect_plan_dataset_breaking,
+    aspect_plan_migrated,
+    aspect_plan_ml_retrain,
     mark_migrated,
     write_dataset_breaking,
     write_ml_retrain,
@@ -82,6 +85,23 @@ class TestGitHubAct(unittest.TestCase):
 
 
 class TestDataHubWrite(unittest.TestCase):
+    def test_aspect_plan_shapes(self):
+        ds = aspect_plan_dataset_breaking("urn:li:dataset:x", "plan body", "desc")
+        names = [a["aspectName"] for a in ds]
+        self.assertEqual(
+            names,
+            ["tagProperties", "globalTags", "editableDatasetProperties", "institutionalMemory"],
+        )
+        self.assertNotIn("cascadeStub", json.dumps(ds))
+        ml = aspect_plan_ml_retrain("urn:li:mlModel:x", "body")
+        self.assertIn("globalTags", [a["aspectName"] for a in ml])
+        mig = aspect_plan_migrated("urn:li:dataset:x", "migrated desc")
+        tags = [a for a in mig if a["aspectName"] == "globalTags"][0]
+        self.assertIn(f"urn:li:tag:{TAG_MIGRATED}", tags["tags"])
+        self.assertIn(f"urn:li:tag:{TAG_BREAKING_PENDING}", tags["removed"])
+        desc = [a for a in mig if a["aspectName"] == "editableDatasetProperties"][0]
+        self.assertIn("migrated", desc["description"].lower())
+
     def test_dataset_writeback_dry_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"CASCADE_WRITEBACK": ""}, clear=False):
@@ -91,6 +111,10 @@ class TestDataHubWrite(unittest.TestCase):
             saved = json.loads(Path(tmp, "datahub_writeback.json").read_text())
             tags = [a for a in saved["actions"] if a["op"] == "add_tags"][0]["tags"]
             self.assertIn(TAG_BREAKING_PENDING, tags)
+            aspect_names = [a["aspectName"] for a in saved["aspects"]]
+            self.assertIn("globalTags", aspect_names)
+            self.assertIn("editableDatasetProperties", aspect_names)
+            self.assertNotIn("cascadeStub", json.dumps(saved))
 
     def test_ml_writeback_dry_run(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -100,6 +124,7 @@ class TestDataHubWrite(unittest.TestCase):
             saved = json.loads(Path(tmp, "ml_writeback.json").read_text())
             tags = [a for a in saved["actions"] if a["op"] == "add_tags"][0]["tags"]
             self.assertIn(TAG_RETRAIN, tags)
+            self.assertNotIn("cascadeStub", json.dumps(saved))
 
     def test_migrated_dry_run(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -110,15 +135,22 @@ class TestDataHubWrite(unittest.TestCase):
             ops = {a["op"]: a for a in saved["actions"]}
             self.assertIn(TAG_BREAKING_PENDING, ops["remove_tags"]["tags"])
             self.assertIn(TAG_MIGRATED, ops["add_tags"]["tags"])
+            self.assertIn("migrated", ops["update_description"]["description"].lower())
+            self.assertNotIn("pending remediation", ops["update_description"]["description"].lower())
+            aspect_names = [a["aspectName"] for a in saved["aspects"]]
+            self.assertIn("editableDatasetProperties", aspect_names)
 
-    def test_live_flag_calls_http(self):
+    def test_live_flag_calls_emit(self):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"CASCADE_WRITEBACK": "1", "DATAHUB_GMS_URL": "http://gms"}):
-                with mock.patch("cascade.datahub_write._post_json", return_value={"ok": True}) as post:
+                with mock.patch("cascade.datahub_write._emit_plan") as emit:
                     result = write_dataset_breaking("urn:li:dataset:x", plan_doc="plan", out_dir=tmp)
             self.assertFalse(result["dry_run"])
             self.assertTrue(result.get("applied"))
-            self.assertGreaterEqual(post.call_count, 1)
+            emit.assert_called_once()
+            plan = emit.call_args[0][0]
+            self.assertEqual(plan[0]["aspectName"], "tagProperties")
+            self.assertNotIn("cascadeStub", json.dumps(plan))
 
 
 class TestApply(unittest.TestCase):

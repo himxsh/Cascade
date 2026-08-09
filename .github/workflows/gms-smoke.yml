@@ -1,0 +1,59 @@
+name: DataHub GMS smoke
+
+# Throwaway health check against repo secrets. Skips cleanly when secrets are unset
+# so fork/CI without DataHub stays green.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  gms-health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip when GMS secrets missing
+        id: gate
+        env:
+          DATAHUB_GMS_URL: ${{ secrets.DATAHUB_GMS_URL }}
+        run: |
+          if [ -z "$DATAHUB_GMS_URL" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "DATAHUB_GMS_URL secret unset — skipping GMS smoke"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          python-version: "3.11"
+      - name: Install Cascade
+        if: steps.gate.outputs.skip != 'true'
+        run: pip install -e .
+      - name: GMS health + seed URN GraphQL
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          DATAHUB_GMS_URL: ${{ secrets.DATAHUB_GMS_URL }}
+          DATAHUB_TOKEN: ${{ secrets.DATAHUB_TOKEN }}
+          SEED_URN: "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)"
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import sys
+          from cascade.datahub_live import fetch_dataset, health_check
+
+          url = os.environ["DATAHUB_GMS_URL"]
+          if not health_check(url):
+              print(f"GMS unhealthy at {url}", file=sys.stderr)
+              sys.exit(1)
+          print(f"GMS healthy at {url}")
+          urn = os.environ["SEED_URN"]
+          ds = fetch_dataset(urn)
+          if not ds:
+              print(f"seed dataset missing: {urn}", file=sys.stderr)
+              print("Seed with: python demo/seed_demo_graph.py --apply", file=sys.stderr)
+              sys.exit(1)
+          print(f"seed ok: {ds['urn']} fields={len(ds.get('schema_fields') or [])}")
+          PY

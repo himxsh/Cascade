@@ -1,4 +1,47 @@
-# DataHub Quickstart (local)
+# DataHub Quickstart
+
+Stand up DataHub for Cascade. **GitHub Actions cannot reach `localhost`** — use
+DataHub Cloud or a durable HTTPS GMS for the production loop; local Docker is for
+laptop demos and offline seeding practice.
+
+---
+
+## Option A — DataHub Cloud / remote GMS (Actions + judges)
+
+1. Provision [DataHub Cloud](https://www.acryldata.io/) or a self-hosted GMS with HTTPS.
+2. Create a token with **read** + **aspect ingest** (write) permissions.
+3. Put secrets in the GitHub repo (Settings → Secrets) and in local `.env`:
+
+```bash
+DATAHUB_GMS_URL=https://<your-gms-host>
+DATAHUB_TOKEN=<token>
+```
+
+4. Seed the demo graph (same script as local):
+
+```bash
+pip install -r demo/requirements.txt
+export DATAHUB_GMS_URL=https://<your-gms-host>
+export DATAHUB_TOKEN=<token>
+python demo/seed_demo_graph.py --apply
+```
+
+5. Verify:
+
+```bash
+./demo/scripts/check_datahub.sh
+# GraphQL smoke via Cascade:
+python -c "from cascade.datahub_live import health_check, fetch_dataset; \
+  assert health_check(); \
+  print(fetch_dataset('urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)'))"
+```
+
+6. Optional Actions smoke: workflow [`.github/workflows/gms-smoke.yml`](../.github/workflows/gms-smoke.yml)
+   (`workflow_dispatch` or nightly) when `DATAHUB_GMS_URL` / `DATAHUB_TOKEN` secrets exist.
+
+---
+
+## Option B — Local Docker (laptop only)
 
 Stand up a local DataHub instance for Cascade development.
 
@@ -89,9 +132,8 @@ DATAHUB_TOKEN=
 
 ## Offline / fixture path
 
-Per spec decision #7, the demo video will be recorded against the **offline fixture
-path** (pre-seeded data, no live DataHub needed). The live quickstart is for local
-development and testing.
+CI and `cascade demo` (default `--source fixture`) work with no GMS. Live path
+(`--source live`, `CASCADE_WRITEBACK=1`) needs Option A or B above.
 
 ## Troubleshooting
 

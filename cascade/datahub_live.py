@@ -68,13 +68,26 @@ GET_DATASET = """query getDataset($urn: String!) {
 }"""
 
 GET_LINEAGE = """query getLineage($urn: String!, $direction: LineageDirection!, $start: Int, $count: Int) {
-  lineage(urn: $urn, direction: $direction, start: $start, count: $count) {
-    relationships {
-      entity {
-        urn
-        ... on Dataset { properties { name } }
-      }
+  searchAcrossLineage(input: {
+    urn: $urn
+    direction: $direction
+    query: "*"
+    start: $start
+    count: $count
+    orFilters: [{ and: [{ field: "degree", values: ["1"], condition: EQUAL }] }]
+  }) {
+    total
+    searchResults {
+      degree
+      entity { urn type }
     }
+  }
+}"""
+
+GET_ML_MODEL = """query getMlModel($urn: String!) {
+  mlModel(urn: $urn) {
+    urn
+    properties { name description }
   }
 }"""
 
@@ -109,6 +122,7 @@ def fetch_dataset(
 def fetch_downstream_lineage(
     urn: str, gms_url: str | None = None, token: str | None = None
 ) -> list[str]:
+    """One-hop downstream URNs via searchAcrossLineage (DataHub 1.x GraphQL)."""
     url = gms_url or _gms_url()
     tok = token or _gms_token()
     urns: list[str] = []
@@ -118,24 +132,94 @@ def fetch_downstream_lineage(
         result = _graphql(
             url, GET_LINEAGE, {"urn": urn, "direction": "DOWNSTREAM", "start": start, "count": count}, tok
         )
-        relationships = result.get("data", {}).get("lineage", {}).get("relationships", [])
-        if not relationships:
+        page = result.get("data", {}).get("searchAcrossLineage") or {}
+        hits = page.get("searchResults") or []
+        if not hits:
             break
-        for r in relationships:
-            entity = r.get("entity", {})
-            if entity.get("urn"):
-                urns.append(entity["urn"])
-        if len(relationships) < count:
+        for hit in hits:
+            entity = hit.get("entity") or {}
+            child = entity.get("urn")
+            if child:
+                urns.append(child)
+        if start + len(hits) >= (page.get("total") or 0) or len(hits) < count:
             break
         start += count
     return urns
 
 
-# ponytail: GraphQL REST stand-in for MCP reads; swap to MCP client when write-back lands
+def fetch_ml_model(
+    urn: str, gms_url: str | None = None, token: str | None = None
+) -> dict[str, Any] | None:
+    url = gms_url or _gms_url()
+    tok = token or _gms_token()
+    try:
+        result = _graphql(url, GET_ML_MODEL, {"urn": urn}, tok)
+    except Exception:
+        return None
+    data = result.get("data", {}).get("mlModel")
+    if not data:
+        return None
+    props = data.get("properties") or {}
+    return {
+        "urn": urn,
+        "name": props.get("name", urn),
+        "description": props.get("description") or "",
+    }
+
+
+def _hydrate_ml_from_fixture(
+    catalog: dict[str, Any],
+    fixture_path: str | Path | None,
+    *,
+    reason: str,
+) -> None:
+    print(f"cascade: ML from fixture ({reason})", file=sys.stderr)
+    try:
+        fc = load_catalog(fixture_path)
+        for k in ("ml_features_by_name", "ml_models_by_feature_urn", "all_ml_features", "all_ml_models"):
+            catalog[k] = fc[k]
+    except Exception as e:
+        print(f"cascade: fixture ML fallback failed: {e}", file=sys.stderr)
+
+
+def _try_live_ml(
+    catalog: dict[str, Any],
+    fixture_path: str | Path | None,
+    gms_url: str,
+    token: str | None,
+) -> None:
+    """Prefer GMS ML entities when seeded; else fixture with stderr notice."""
+    try:
+        fc = load_catalog(fixture_path)
+    except Exception:
+        return
+
+    live_models: list[dict[str, Any]] = []
+    for mm in fc.get("all_ml_models") or []:
+        urn = mm.get("urn")
+        if not urn:
+            continue
+        got = fetch_ml_model(urn, gms_url, token)
+        if got:
+            live_models.append({**mm, **got})
+
+    if not live_models:
+        _hydrate_ml_from_fixture(
+            catalog, fixture_path, reason="no mlModel aspects in GMS"
+        )
+        return
+
+    print("cascade: ML models from live GMS", file=sys.stderr)
+    catalog["all_ml_models"] = live_models
+    catalog["all_ml_features"] = fc.get("all_ml_features") or []
+    catalog["ml_features_by_name"] = fc.get("ml_features_by_name") or {}
+    catalog["ml_models_by_feature_urn"] = fc.get("ml_models_by_feature_urn") or {}
+
+
+# ponytail: GraphQL REST stand-in for MCP reads; optional MCP in Phase 6.
 #
-# Hybrid: live hydrates datasets + lineage + owners from GMS.
-# ML features/models still read from fixture because their aspects are
-# inconsistently available via the GMS GraphQL schema.
+# Live hydrates datasets + lineage + owners from GMS. ML models are read from
+# GMS when present; otherwise fixture ML with an explicit stderr notice.
 def load_catalog_live(
     seed_urn: str,
     gms_url: str | None = None,
@@ -179,13 +263,7 @@ def load_catalog_live(
         "_raw": {},
     }
 
-    try:
-        fc = load_catalog(fixture_path)
-        for k in ("ml_features_by_name", "ml_models_by_feature_urn", "all_ml_features", "all_ml_models"):
-            catalog[k] = fc[k]
-    except Exception:
-        pass
-
+    _try_live_ml(catalog, fixture_path, url, tok)
     return catalog
 
 

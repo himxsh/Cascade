@@ -110,10 +110,11 @@ class TestFetchLineage(unittest.TestCase):
     def test_fetch_downstream_lineage(self, mock_gql):
         mock_gql.return_value = {
             "data": {
-                "lineage": {
-                    "relationships": [
-                        {"entity": {"urn": STG_URN, "properties": {"name": "stg_orders"}}}
-                    ]
+                "searchAcrossLineage": {
+                    "total": 1,
+                    "searchResults": [
+                        {"degree": 1, "entity": {"urn": STG_URN, "type": "DATASET"}}
+                    ],
                 }
             }
         }
@@ -122,7 +123,9 @@ class TestFetchLineage(unittest.TestCase):
 
     @patch("cascade.datahub_live._graphql")
     def test_fetch_downstream_lineage_empty(self, mock_gql):
-        mock_gql.return_value = {"data": {"lineage": {"relationships": []}}}
+        mock_gql.return_value = {
+            "data": {"searchAcrossLineage": {"total": 0, "searchResults": []}}
+        }
         urns = fetch_downstream_lineage(RAW_URN, "http://fake:8080")
         self.assertEqual(urns, [])
 
@@ -131,19 +134,22 @@ class TestFetchLineage(unittest.TestCase):
         mock_gql.side_effect = [
             {
                 "data": {
-                    "lineage": {
-                        "relationships": [
-                            {"entity": {"urn": STG_URN}}
-                        ] * 100
+                    "searchAcrossLineage": {
+                        "total": 101,
+                        "searchResults": [
+                            {"degree": 1, "entity": {"urn": STG_URN}}
+                        ]
+                        * 100,
                     }
                 }
             },
             {
                 "data": {
-                    "lineage": {
-                        "relationships": [
-                            {"entity": {"urn": FCT_URN}}
-                        ]
+                    "searchAcrossLineage": {
+                        "total": 101,
+                        "searchResults": [
+                            {"degree": 1, "entity": {"urn": FCT_URN}}
+                        ],
                     }
                 }
             },
@@ -162,15 +168,17 @@ class TestLoadCatalogLive(unittest.TestCase):
         lineage_variable_id = [0]
 
         def side_effect(url, query, variables, token):
-            if "getLineage" in query:
+            if "getLineage" in query or "searchAcrossLineage" in query:
                 urn = variables["urn"]
                 children = hops.get(urn, [])
                 return {
                     "data": {
-                        "lineage": {
-                            "relationships": [
-                                {"entity": {"urn": c}} for c in children
-                            ]
+                        "searchAcrossLineage": {
+                            "total": len(children),
+                            "searchResults": [
+                                {"degree": 1, "entity": {"urn": c, "type": "DATASET"}}
+                                for c in children
+                            ],
                         }
                     }
                 }
