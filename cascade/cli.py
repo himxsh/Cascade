@@ -7,19 +7,38 @@ from pathlib import Path
 
 from cascade.agent import choose_and_rewrite
 from cascade.apply import run_apply
+from cascade.config import load_config, resolve_urn
 from cascade.datahub_live import resolve_catalog
 from cascade.demo import DEFAULT_DIFF, DEFAULT_MODELS, DEFAULT_URN, run_demo
+from cascade.diff_parser import changed_paths, parse_changes_text
+from cascade.dotenv_load import load_dotenv
 from cascade.impact import build_impact_report
-from cascade.diff_parser import load_changes
+
+
+def _resolve_impact_urn(args: argparse.Namespace, diff_text: str) -> str:
+    cfg = load_config(getattr(args, "config", None))
+    paths = changed_paths(diff_text) if not diff_text.lstrip().startswith(("{", "[")) else []
+    return resolve_urn(paths, cfg, explicit=getattr(args, "urn", None) or None)
+
+
+def _models_dir(args: argparse.Namespace, default: str | None = None) -> str | None:
+    if getattr(args, "models_dir", None):
+        return args.models_dir
+    cfg = load_config(getattr(args, "config", None))
+    if cfg.models_dir:
+        return cfg.models_dir
+    return default
 
 
 def cmd_impact(args: argparse.Namespace) -> None:
+    diff_text = Path(args.diff).read_text()
+    changes = parse_changes_text(diff_text)
+    urn = _resolve_impact_urn(args, diff_text)
+    models_dir = _models_dir(args)
 
-    changes = load_changes(args.diff)
-
-    catalog = resolve_catalog(args.source, args.urn, args.fixture)
+    catalog = resolve_catalog(args.source, urn, args.fixture)
     report = build_impact_report(
-        source_urn=args.urn,
+        source_urn=urn,
         changes=changes,
         catalog=catalog,
     )
@@ -28,8 +47,8 @@ def cmd_impact(args: argparse.Namespace) -> None:
         remediations = choose_and_rewrite(
             changes=changes,
             catalog=catalog,
-            models_dir=args.models_dir,
-            source_urn=args.urn,
+            models_dir=models_dir,
+            source_urn=urn,
         )
         report.remediations = remediations
         out_dir = getattr(args, "out", None)
@@ -55,7 +74,7 @@ def cmd_generate(args: argparse.Namespace) -> None:
     source_urn = report_data.get("source_urn", "")
     changes = report_data.get("changes", [])
     catalog = resolve_catalog(getattr(args, "source", "fixture"), source_urn or None, args.fixture)
-    models_dir = args.models_dir or "examples/models"
+    models_dir = _models_dir(args, "examples/models")
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -85,7 +104,7 @@ def cmd_apply(args: argparse.Namespace) -> None:
         source_urn = report_data.get("source_urn", "")
         changes = report_data.get("changes", [])
         catalog = resolve_catalog(getattr(args, "source", "fixture"), source_urn or None, args.fixture)
-        models_dir = args.models_dir or "examples/models"
+        models_dir = _models_dir(args, "examples/models")
         report_data["remediations"] = choose_and_rewrite(
             changes=changes,
             catalog=catalog,
@@ -118,13 +137,21 @@ def cmd_demo(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    load_dotenv()
     parser = argparse.ArgumentParser(description="Cascade — schema change impact analyzer")
     sub = parser.add_subparsers(dest="command")
     sub.required = True
 
     impact_p = sub.add_parser("impact", help="Build a blast-radius impact report")
-    impact_p.add_argument("--urn", required=True, help="Source dataset URN")
-    impact_p.add_argument("--diff", required=True, help="Path to JSON changes file")
+    impact_p.add_argument(
+        "--urn",
+        help="Source dataset URN (optional if .cascade/config.json maps the diff paths)",
+    )
+    impact_p.add_argument("--diff", required=True, help="Path to JSON changes or unified diff")
+    impact_p.add_argument(
+        "--config",
+        help="Path to Cascade config JSON (default: .cascade/config.json)",
+    )
     impact_p.add_argument("--fixture", help="Override fixture path")
     impact_p.add_argument(
         "--source",
@@ -141,6 +168,7 @@ def main() -> None:
     gen_p.add_argument("--report", required=True, help="Path to impact report JSON")
     gen_p.add_argument("--out", required=True, help="Output directory for rewritten SQL files")
     gen_p.add_argument("--models-dir", help="Directory with downstream model SQL files")
+    gen_p.add_argument("--config", help="Path to Cascade config JSON")
     gen_p.add_argument("--fixture", help="Override fixture path")
     gen_p.add_argument(
         "--source",
@@ -157,6 +185,7 @@ def main() -> None:
     apply_p.add_argument("--report", required=True, help="Path to impact report JSON")
     apply_p.add_argument("--out", required=True, help="Artifact output directory")
     apply_p.add_argument("--models-dir", help="Directory with downstream model SQL files")
+    apply_p.add_argument("--config", help="Path to Cascade config JSON")
     apply_p.add_argument("--fixture", help="Override fixture path")
     apply_p.add_argument(
         "--source",

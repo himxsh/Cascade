@@ -55,7 +55,11 @@ python -m unittest tests.test_golden_diff -v
 cascade apply --report /tmp/cascade-out/impact_report.json --out /tmp/cascade-apply --mark-migrated
 ```
 
-GitHub Action [`.github/workflows/cascade.yml`](.github/workflows/cascade.yml) runs the same fixture path and uploads artifacts. With `GITHUB_TOKEN` on a PR it posts the comment; DataHub live write-back stays off unless `CASCADE_WRITEBACK=1`.
+GitHub Action [`.github/workflows/cascade.yml`](.github/workflows/cascade.yml) has two jobs:
+- **fixture-ci** — hardcoded golden diff, no GMS secrets (always green offline path)
+- **pr-impact** — on `pull_request`, `git diff` base…head for `*.sql` / `models/` / `schema.yml` → `cascade impact` (live GMS when `DATAHUB_GMS_URL` is set, else auto→fixture) → apply dry-run → PR comment
+
+Map repo paths to DataHub URNs in [`.cascade/config.json`](.cascade/config.json) (or pass `--urn` / set `CASCADE_SOURCE_URN` / repo variable `CASCADE_SOURCE_URN`).
 
 ### Data sources
 
@@ -77,6 +81,7 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 | Variable | Required for | Notes |
 |----------|----------------|-------|
 | `DATAHUB_GMS_URL` / `DATAHUB_TOKEN` | `--source live` / live write-back | HTTPS GMS for Actions; localhost only for laptop |
+| `CASCADE_SOURCE_URN` | Optional URN when config mapping misses | Also repo Actions variable `CASCADE_SOURCE_URN` |
 | `CASCADE_WRITEBACK=1` | Live DataHub/ML tags + docs | Default unset = dry-run JSON; never set on untrusted CI |
 | `GITHUB_TOKEN` / `GITHUB_REPOSITORY` / `CASCADE_PR_NUMBER` | Live PR comment | Action sets these on `pull_request` |
 | `CASCADE_DOWNSTREAM_HEAD` / `CASCADE_DOWNSTREAM_BASE` | Live downstream PR | Head must already contain rewritten files |
@@ -86,7 +91,11 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 
 **LLM cost / latency:** When a key is set, Cascade calls the chat API once per downstream node (timeout 30s). Expect ~1–3s and a fraction of a cent per node on `gpt-4o-mini`; failures (timeout/parse/schema-gate) fall back to the deterministic rewrite with a stderr notice. Unset the key for offline/CI deterministic runs.
 
-Repo secrets for live Actions: `DATAHUB_GMS_URL`, `DATAHUB_TOKEN`, `LLM_API_KEY`. Smoke job: [`.github/workflows/gms-smoke.yml`](.github/workflows/gms-smoke.yml).
+Repo secrets for live Actions: `DATAHUB_GMS_URL`, `DATAHUB_TOKEN`, `LLM_API_KEY`. Optional repo variable: `CASCADE_SOURCE_URN`. Smoke job: [`.github/workflows/gms-smoke.yml`](.github/workflows/gms-smoke.yml).
+
+### URN mapping
+
+[`.cascade/config.json`](.cascade/config.json) maps changed path prefixes → dataset URN (`default_urn` / `models_dir` optional). Longest matching prefix wins. Override with `--urn` or `CASCADE_SOURCE_URN`.
 
 ## Open-source Skill
 

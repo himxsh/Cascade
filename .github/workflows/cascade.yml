@@ -1,7 +1,8 @@
 name: Cascade Act
 
-# Fixture/demo path: impact + generate + dry-run apply. Live comment/write-back
-# only when secrets/env are present (GITHUB_TOKEN, CASCADE_WRITEBACK, etc.).
+# fixture-ci: offline golden path (hardcoded example diff) — no GMS secrets needed.
+# pr-impact: real PR base…head SQL/model/schema diff → impact + comment.
+# Live GMS when DATAHUB_GMS_URL secret is set; else --source auto falls back to fixture.
 
 on:
   pull_request:
@@ -9,17 +10,22 @@ on:
       - "**/*.sql"
       - "**/models/**"
       - "**/schema.yml"
+      - "**/schema.yaml"
       - "examples/diffs/**"
+      - ".cascade/config.json"
+      - "cascade/**"
+      - ".github/workflows/cascade.yml"
   workflow_dispatch:
   push:
     paths:
       - "examples/diffs/**"
       - "examples/models/**"
       - "cascade/**"
+      - ".cascade/config.json"
       - ".github/workflows/cascade.yml"
 
 jobs:
-  fixture-dry-run:
+  fixture-ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,37 +36,104 @@ jobs:
         run: pip install -e .
       - name: Impact + generate (fixture)
         env:
-          RAW_URN: "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)"
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
           LLM_MODEL: ${{ vars.LLM_MODEL }}
         run: |
-          mkdir -p artifacts/generate
+          mkdir -p artifacts/fixture
           cascade impact \
-            --urn "$RAW_URN" \
             --diff examples/diffs/raw_orders_rename_user_id.json \
             --source fixture \
             --generate --models-dir examples/models \
-            --out artifacts/generate > artifacts/impact_stdout.json
-      - name: Apply dry-run (comment + write-back artifacts)
+            --out artifacts/fixture > artifacts/fixture/impact_stdout.json
+      - name: Apply dry-run
+        run: |
+          cascade apply \
+            --report artifacts/fixture/impact_report.json \
+            --out artifacts/fixture/apply \
+            --mark-migrated
+      - name: Upload fixture artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cascade-fixture
+          path: artifacts/fixture/
+
+  pr-impact:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e .
+      - name: Compute PR diff
+        id: diff
+        run: |
+          mkdir -p artifacts/pr
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          # Filter to SQL / models / schema.yml (stdlib-ish shell; no cascade.yml YAML dep)
+          mapfile -t FILES < <(
+            git diff --name-only "${BASE}...${HEAD}" \
+              | grep -E '\.sql$|(^|/)models/|schema\.ya?ml$' || true
+          )
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+            echo "No SQL/model/schema changes in PR; skipping impact."
+            : > artifacts/pr/pr.diff
+          else
+            echo "empty=false" >> "$GITHUB_OUTPUT"
+            git diff "${BASE}...${HEAD}" -- "${FILES[@]}" > artifacts/pr/pr.diff
+            wc -l artifacts/pr/pr.diff
+          fi
+      - name: Impact + generate (PR diff)
+        if: steps.diff.outputs.empty != 'true'
         env:
-          # Leave CASCADE_WRITEBACK unset → DataHub dry-run artifacts only
+          DATAHUB_GMS_URL: ${{ secrets.DATAHUB_GMS_URL }}
+          DATAHUB_TOKEN: ${{ secrets.DATAHUB_TOKEN }}
+          CASCADE_SOURCE_URN: ${{ vars.CASCADE_SOURCE_URN }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+        run: |
+          # live when GMS secret present; auto otherwise (fixture fallback)
+          if [ -n "${DATAHUB_GMS_URL:-}" ]; then
+            SOURCE=live
+          else
+            SOURCE=auto
+          fi
+          cascade impact \
+            --diff artifacts/pr/pr.diff \
+            --source "$SOURCE" \
+            --generate \
+            --out artifacts/pr/generate \
+            > artifacts/pr/impact_stdout.json
+      - name: Apply dry-run + comment body
+        if: steps.diff.outputs.empty != 'true'
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           CASCADE_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           cascade apply \
-            --report artifacts/generate/impact_report.json \
-            --out artifacts/apply \
-            --mark-migrated
-      - name: Upload Cascade artifacts
+            --report artifacts/pr/generate/impact_report.json \
+            --out artifacts/pr/apply \
+            --mark-migrated \
+            --pr-number "${{ github.event.pull_request.number }}"
+      - name: Upload PR artifacts
+        if: steps.diff.outputs.empty != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: cascade-artifacts
-          path: artifacts/
-      - name: Post PR comment when on a pull_request
-        if: github.event_name == 'pull_request'
+          name: cascade-pr
+          path: artifacts/pr/
+      - name: Post PR comment
+        if: steps.diff.outputs.empty != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -69,6 +142,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           from cascade.github_act import post_pr_comment
-          body = Path("artifacts/apply/pr_comment.md").read_text()
+          body = Path("artifacts/pr/apply/pr_comment.md").read_text()
           print(post_pr_comment(body))
           PY

@@ -12,7 +12,10 @@ from pydantic import BaseModel, Field
 
 from cascade.datahub_live import health_check
 from cascade.demo import DEFAULT_URN
+from cascade.dotenv_load import load_dotenv
 from cascade.ui_run import load_demo_diff, run_ui_pipeline
+
+load_dotenv()
 
 # Built UI lives next to the function so Vercel includes it in the bundle.
 _STATIC = Path(__file__).resolve().parent / "static"

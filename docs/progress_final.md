@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-09  
 **Tracking:** [final_plan.md](./final_plan.md)  
-**Current phase:** Phase 3 — Action on real PR diff  
-**Overall:** Phases 0–2 largely done (local GMS); production Action/remediation PR next
+**Current phase:** Phase 4 — Automatic remediation PR  
+**Overall:** Phases 0–3 done (local GMS; PR Action uses real diff + fixture-ci). Next: auto remediation PR.
 
 Original hackathon MVP progress stays in [progress.md](./progress.md). This file tracks only the production loop.
 
@@ -67,10 +67,10 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Workflow off hardcoded example diff | [ ] | Still `examples/diffs/...` |
-| Diff from PR base…head | [ ] | |
-| URN config mapping | [ ] | |
-| Live impact + comment | [ ] | |
+| Workflow off hardcoded example diff | [x] | `pr-impact` uses PR `git diff`; `fixture-ci` keeps golden file |
+| Diff from PR base…head | [x] | `*.sql` / `models/` / `schema.yml` filtered in Action |
+| URN config mapping | [x] | `.cascade/config.json` + `CASCADE_SOURCE_URN` / `--urn` |
+| Live impact + comment | [x] | `SOURCE=live` when GMS secret set; else `auto`→fixture + comment |
 
 ---
 
@@ -122,18 +122,18 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 
 ## Definition of done (from final plan)
 
-- [ ] Action runs on the PR’s own schema/SQL diff
-- [ ] Catalog read is live GMS (ML from GMS when available)
-- [ ] LLM primary when keyed; deterministic fallback only
+- [x] Action runs on the PR’s own schema/SQL diff
+- [~] Catalog read is live GMS (ML from GMS when available) — laptop yes; Actions when HTTPS GMS secret set
+- [x] LLM primary when keyed; deterministic fallback only
 - [x] Schema gate rejects invented columns
-- [~] Source PR blast-radius comment (fixture Action path works)
+- [x] Source PR blast-radius comment (pr-impact + fixture-ci)
 - [ ] Downstream remediation PR auto create/update
-- [~] Real DataHub write-back aspects (code done; live UI unverified)
+- [x] Real DataHub write-back aspects (verified on laptop UI)
 - [ ] Merge flips pending → `cascade:migrated`
 - [x] Dry-run default; live gated by secrets
 - [ ] Idempotent re-runs
 - [x] CI eval stays green (fixture)
-- [~] README secrets / judge path (URN mapping still thin)
+- [x] README secrets / URN mapping (`.cascade/config.json`)
 
 ---
 
@@ -144,12 +144,13 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 | 2026-08-09 | Track production work in `progress_final.md` | Keep MVP [progress.md](./progress.md) unchanged |
 | 2026-08-09 | Use local Docker quickstart for live GMS (not Cloud) | Laptop demos; Actions stay fixture until HTTPS GMS exists |
 | 2026-08-09 | Live write-back = SDK emitter (not `cascadeStub`) | Visible tags/docs in DataHub UI |
+| 2026-08-09 | URN mapping = `.cascade/config.json` (not YAML) | Stdlib JSON; no new PyYAML dep |
 
 ---
 
 ## Blockers
 
-- Local DataHub quickstart must finish (images + containers) before Phase 0/1 live verify.
+- Actions cannot reach localhost GMS — `pr-impact` uses `--source live` only when `DATAHUB_GMS_URL` secret is an HTTPS GMS; otherwise auto→fixture.
 
 ---
 
@@ -165,6 +166,12 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 - Live write-back verified in UI; `mark_migrated` now refreshes description.
 - Phase 2: LLM-primary agent + stderr logging + Action env + tests.
 
+### 2026-08-09 — Phase 3
+
+- `.cascade/config.json` path→URN; `cascade/config.py` + CLI optional `--urn`.
+- `pr-impact` job: real `git diff` base…head → `load_changes` / patch parser; separate `fixture-ci`.
+- dotenv auto-load kept for laptop CLI/API.
+
 ### 2026-08-09 — next
 
-- Phase 3: Action on real PR diff (not hardcoded `examples/diffs/...`).
+- Phase 4: automatic remediation PR (Git Data API; drop happy-path `CASCADE_DOWNSTREAM_HEAD`).
