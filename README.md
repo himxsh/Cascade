@@ -100,6 +100,20 @@ Repo secrets for live Actions: `DATAHUB_GMS_URL`, `DATAHUB_TOKEN`, `LLM_API_KEY`
 
 [`.cascade/config.json`](.cascade/config.json) maps changed path prefixes → dataset URN (`default_urn` / `models_dir` optional). Longest matching prefix wins. Override with `--urn` or `CASCADE_SOURCE_URN`.
 
+## Production
+
+| Concern | Behavior |
+|---------|----------|
+| Modes | `cascade apply --mode dry-run` (default) writes artifacts only; `--mode apply` allows live GitHub/DataHub when secrets/env flags are set |
+| Policy | `severity=high` requires an open remediation PR — `--require-policy` / `cascade policy --require` fails the check otherwise |
+| Idempotent comments | Re-runs **edit** the existing `## Cascade impact report` comment instead of posting a new one |
+| Idempotent remediation PR | Same upstream PR → same branch `cascade/remediation/{n}` (create or update) |
+| Audit trail | Each apply copies receipts into `cascade/runs/<id>/` (gitignored); Actions also write a job summary |
+| Env protection | Optionally require a GitHub Environment approval on jobs that set `--mode apply` + write-back |
+| Failure modes | No GMS secret → fixture/auto; no `CASCADE_OPEN_DOWNSTREAM_PR` → patch artifacts only; schema-gate/LLM failure → deterministic fallback |
+
+Dialect profiles (BigQuery / Snowflake / Postgres) are deferred until the core loop is stable.
+
 ## Open-source Skill
 
 Draft DataHub Skill [`breaking-change-remediation`](oss/datahub-skills/skills/breaking-change-remediation/SKILL.md) lives under [`oss/datahub-skills/`](oss/datahub-skills/) for now (in-repo only; do not open upstream until coordinated).

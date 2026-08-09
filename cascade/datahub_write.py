@@ -26,6 +26,14 @@ def _live_enabled() -> bool:
     return os.environ.get("CASCADE_WRITEBACK", "").strip() in ("1", "true", "yes")
 
 
+def _want_live(dry_run: bool | None) -> bool:
+    if dry_run is True:
+        return False
+    if dry_run is False:
+        return True
+    return _live_enabled()
+
+
 def _gms_url() -> str:
     return (os.environ.get("DATAHUB_GMS_URL") or "http://localhost:8080").rstrip("/")
 
@@ -213,11 +221,13 @@ def write_dataset_breaking(
     *,
     plan_doc: str,
     out_dir: str | Path | None = None,
+    dry_run: bool | None = None,
 ) -> dict[str, Any]:
     """Tags + editable description + institutional memory change plan."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     description = f"[{now}] Cascade: breaking schema change pending remediation."
     aspects = aspect_plan_dataset_breaking(source_urn, plan_doc, description)
+    live = _want_live(dry_run)
     payload = {
         "urn": source_urn,
         "actions": [
@@ -226,10 +236,10 @@ def write_dataset_breaking(
             {"op": "update_description", "description": description},
         ],
         "aspects": aspects,
-        "dry_run": not _live_enabled(),
+        "dry_run": not live,
     }
     _write_artifact(out_dir, "datahub_writeback.json", payload)
-    if not _live_enabled():
+    if not live:
         return payload
 
     _emit_plan(aspects)
@@ -243,9 +253,11 @@ def write_ml_retrain(
     *,
     via_feature: str,
     out_dir: str | Path | None = None,
+    dry_run: bool | None = None,
 ) -> dict[str, Any]:
     body = f"Feature `{via_feature}` changed; retrain suggested for `{model_urn}`."
     aspects = aspect_plan_ml_retrain(model_urn, body)
+    live = _want_live(dry_run)
     payload = {
         "urn": model_urn,
         "actions": [
@@ -253,10 +265,10 @@ def write_ml_retrain(
             {"op": "save_document", "title": "Cascade ML incident", "body": body},
         ],
         "aspects": aspects,
-        "dry_run": not _live_enabled(),
+        "dry_run": not live,
     }
     _write_artifact(out_dir, "ml_writeback.json", payload)
-    if not _live_enabled():
+    if not live:
         return payload
 
     _emit_plan(aspects)
@@ -269,11 +281,13 @@ def mark_migrated(
     source_urn: str,
     *,
     out_dir: str | Path | None = None,
+    dry_run: bool | None = None,
 ) -> dict[str, Any]:
     """On remediation merge: clear pending, add cascade:migrated, refresh description."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     description = f"[{now}] Cascade: remediation merged (cascade:migrated)."
     aspects = aspect_plan_migrated(source_urn, description)
+    live = _want_live(dry_run)
     payload = {
         "urn": source_urn,
         "actions": [
@@ -282,10 +296,10 @@ def mark_migrated(
             {"op": "update_description", "description": description},
         ],
         "aspects": aspects,
-        "dry_run": not _live_enabled(),
+        "dry_run": not live,
     }
     _write_artifact(out_dir, "migrated.json", payload)
-    if not _live_enabled():
+    if not live:
         return payload
 
     _emit_plan(aspects)

@@ -52,6 +52,7 @@ jobs:
           cascade apply \
             --report artifacts/fixture/impact_report.json \
             --out artifacts/fixture/apply \
+            --mode dry-run \
             --mark-migrated
       - name: Upload fixture artifacts
         uses: actions/upload-artifact@v4
@@ -126,10 +127,13 @@ jobs:
           CASCADE_PR_NUMBER: ${{ github.event.pull_request.number }}
           CASCADE_OPEN_DOWNSTREAM_PR: "1"
           CASCADE_DOWNSTREAM_BASE: ${{ github.event.pull_request.base.ref }}
+          CASCADE_RUN_ID: pr-${{ github.event.pull_request.number }}-${{ github.run_id }}
         run: |
           cascade apply \
             --report artifacts/pr/generate/impact_report.json \
             --out artifacts/pr/apply \
+            --mode apply \
+            --require-policy \
             --pr-number "${{ github.event.pull_request.number }}"
       - name: Upload PR artifacts
         if: steps.diff.outputs.empty != 'true'

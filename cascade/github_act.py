@@ -64,6 +64,20 @@ def remediation_branch_name(upstream_pr: int | None) -> str:
     return "cascade/remediation/manual"
 
 
+COMMENT_MARKER = "## Cascade impact report"
+
+
+def find_cascade_comment(pr_number: int) -> dict[str, Any] | None:
+    """Return the most recent Cascade impact comment on the PR, if any."""
+    comments = _github_api_list("GET", f"/issues/{pr_number}/comments?per_page=100")
+    found: dict[str, Any] | None = None
+    for c in comments:
+        body = c.get("body") or ""
+        if body.startswith(COMMENT_MARKER):
+            found = c
+    return found
+
+
 def write_comment_artifact(out_dir: str | Path, body: str) -> Path:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -72,21 +86,44 @@ def write_comment_artifact(out_dir: str | Path, body: str) -> Path:
     return path
 
 
-def post_pr_comment(body: str, *, pr_number: int | None = None, out_dir: str | Path | None = None) -> dict[str, Any]:
-    """Post comment when GITHUB_TOKEN exists; otherwise write pr_comment.md under out_dir."""
+def post_pr_comment(
+    body: str,
+    *,
+    pr_number: int | None = None,
+    out_dir: str | Path | None = None,
+    force_dry_run: bool = False,
+) -> dict[str, Any]:
+    """Upsert Cascade comment when GITHUB_TOKEN exists; otherwise write artifact only."""
     if out_dir is not None:
         write_comment_artifact(out_dir, body)
 
     token = os.environ.get("GITHUB_TOKEN")
-    if not token:
+    if force_dry_run or not token:
         return {"dry_run": True, "posted": False, "path": str(Path(out_dir or ".") / "pr_comment.md")}
 
     number = pr_number or int(os.environ.get("CASCADE_PR_NUMBER") or os.environ.get("PR_NUMBER") or "0")
     if number <= 0:
         return {"dry_run": False, "posted": False, "error": "no PR number"}
 
+    existing = find_cascade_comment(number)
+    if existing and existing.get("id"):
+        result = _github_api("PATCH", f"/issues/comments/{existing['id']}", {"body": body})
+        return {
+            "dry_run": False,
+            "posted": True,
+            "updated": True,
+            "id": result.get("id") or existing.get("id"),
+            "url": result.get("html_url") or existing.get("html_url"),
+        }
+
     result = _github_api("POST", f"/issues/{number}/comments", {"body": body})
-    return {"dry_run": False, "posted": True, "id": result.get("id"), "url": result.get("html_url")}
+    return {
+        "dry_run": False,
+        "posted": True,
+        "updated": False,
+        "id": result.get("id"),
+        "url": result.get("html_url"),
+    }
 
 
 def build_unified_diff(path: str, old: str, new: str) -> str:
@@ -261,6 +298,7 @@ def open_or_update_downstream_pr(
     reviewers: list[str] | None = None,
     upstream_pr: int | None = None,
     source_urn: str | None = None,
+    force_dry_run: bool = False,
 ) -> dict[str, Any]:
     """Write rewritten files + unified patch; live open via Git Data API when enabled."""
     patch = build_downstream_patch(files) if files else ""
@@ -308,7 +346,7 @@ def open_or_update_downstream_pr(
     head_override = os.environ.get("CASCADE_DOWNSTREAM_HEAD", "").strip()
     open_via_api = _truthy("CASCADE_OPEN_DOWNSTREAM_PR")
 
-    if not token or (not open_via_api and not head_override) or not files:
+    if force_dry_run or not token or (not open_via_api and not head_override) or not files:
         return {
             "dry_run": True,
             "opened": False,
