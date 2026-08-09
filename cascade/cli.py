@@ -13,6 +13,7 @@ from cascade.demo import DEFAULT_DIFF, DEFAULT_MODELS, DEFAULT_URN, run_demo
 from cascade.diff_parser import changed_paths, parse_changes_text
 from cascade.dotenv_load import load_dotenv
 from cascade.impact import build_impact_report
+from cascade.policy import evaluate_policy
 
 
 def _resolve_impact_urn(args: argparse.Namespace, diff_text: str) -> str:
@@ -117,9 +118,28 @@ def cmd_apply(args: argparse.Namespace) -> None:
         out_dir=args.out,
         mark_lifecycle=args.mark_migrated,
         pr_number=args.pr_number,
+        mode=args.mode,
     )
+    if getattr(args, "require_policy", False) and not (summary.get("policy") or {}).get("ok", True):
+        json.dump(summary, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        raise SystemExit(f"cascade: policy failed: {(summary.get('policy') or {}).get('message')}")
     json.dump(summary, sys.stdout, indent=2)
     sys.stdout.write("\n")
+
+
+def cmd_policy(args: argparse.Namespace) -> None:
+    report = json.loads(Path(args.report).read_text())
+    remediation_open = bool(args.remediation_open)
+    if args.summary:
+        summary = json.loads(Path(args.summary).read_text())
+        downstream = summary.get("downstream_pr") or {}
+        remediation_open = remediation_open or bool(downstream.get("opened") or downstream.get("url"))
+    result = evaluate_policy(report, remediation_open=remediation_open)
+    json.dump(result, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+    if args.require and not result.get("ok"):
+        raise SystemExit(f"cascade: policy failed: {result.get('message')}")
 
 
 def cmd_demo(args: argparse.Namespace) -> None:
@@ -204,7 +224,33 @@ def main() -> None:
         help="Also emit migrated lifecycle write-back (merge hook / stub)",
     )
     apply_p.add_argument("--pr-number", type=int, help="Source PR number for live comment")
+    apply_p.add_argument(
+        "--mode",
+        choices=["dry-run", "apply"],
+        default="dry-run",
+        help="dry-run (default): artifacts only; apply: allow live GH/DataHub when env secrets set",
+    )
+    apply_p.add_argument(
+        "--require-policy",
+        action="store_true",
+        help="Exit non-zero if policy check fails (e.g. high severity without remediation PR)",
+    )
     apply_p.set_defaults(func=cmd_apply)
+
+    policy_p = sub.add_parser("policy", help="Evaluate production policy against an impact report")
+    policy_p.add_argument("--report", required=True, help="Path to impact report JSON")
+    policy_p.add_argument("--summary", help="Optional apply_summary.json (reads remediation opened)")
+    policy_p.add_argument(
+        "--remediation-open",
+        action="store_true",
+        help="Treat remediation PR as open",
+    )
+    policy_p.add_argument(
+        "--require",
+        action="store_true",
+        help="Exit non-zero when policy fails",
+    )
+    policy_p.set_defaults(func=cmd_policy)
 
     demo_p = sub.add_parser(
         "demo",

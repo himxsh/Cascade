@@ -241,7 +241,7 @@ class TestApply(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             env = {k: v for k, v in os.environ.items() if k not in ("GITHUB_TOKEN", "CASCADE_WRITEBACK", "CASCADE_OPEN_DOWNSTREAM_PR")}
             with mock.patch.dict(os.environ, env, clear=True):
-                summary = run_apply(report, out_dir=tmp, mark_lifecycle=True)
+                summary = run_apply(report, out_dir=tmp, mark_lifecycle=True, audit_root=tmp)
             self.assertTrue(Path(tmp, "pr_comment.md").exists())
             self.assertTrue(Path(tmp, "rewritten", "fct_orders.sql").exists())
             self.assertTrue(Path(tmp, "downstream_pr.diff").exists())
@@ -252,6 +252,7 @@ class TestApply(unittest.TestCase):
             self.assertTrue(Path(tmp, "apply_summary.json").exists())
             self.assertTrue(summary["comment"]["dry_run"])
             self.assertIn("alice", summary["downstream_pr"]["reviewers"])
+            self.assertIn("policy", summary)
             sql = Path(tmp, "rewritten", "fct_orders.sql").read_text()
             self.assertEqual(sql, GOLDEN_SQL.read_text())
             patch = Path(tmp, "downstream_pr.diff").read_text()

@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-09  
 **Tracking:** [final_plan.md](./final_plan.md)  
-**Current phase:** Phase 5 — Production hardening  
-**Overall:** Phases 0–4 done. Next: hardening / OSS / submit assets.
+**Current phase:** Phase 6 — Deepen DataHub / OSS (optional) / Phase 7 submit  
+**Overall:** Phases 0–5 done. Core production loop hardened.
 
 Original hackathon MVP progress stays in [progress.md](./progress.md). This file tracks only the production loop.
 
@@ -89,12 +89,12 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 
 | Item | Status | Notes |
 |------|--------|-------|
-| dry-run vs apply / env protection | [ ] | |
-| Policy status check | [ ] | |
-| Idempotent comments / write-backs | [ ] | |
-| Run audit dir | [ ] | |
-| Eval suite expansion | [ ] | |
-| Observability | [ ] | |
+| dry-run vs apply / env protection | [x] | `--mode dry-run\|apply`; document GH Environment approval |
+| Policy status check | [x] | `cascade/policy.py` + `--require-policy` / `cascade policy` |
+| Idempotent comments / write-backs | [x] | Edit prior Cascade comment; remediation branch upsert |
+| Run audit dir | [x] | `cascade/runs/<id>/` (gitignored) |
+| Eval suite expansion | [-] | Existing golden kept; dialects deferred |
+| Observability | [x] | `GITHUB_STEP_SUMMARY` + apply_summary policy block |
 
 ---
 
@@ -131,9 +131,9 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 - [x] Real DataHub write-back aspects (verified on laptop UI)
 - [x] Merge flips pending → `cascade:migrated` (`cascade-migrated.yml`)
 - [x] Dry-run default; live gated by secrets
-- [~] Idempotent re-runs (same upstream PR → same remediation branch/PR)
+- [x] Idempotent re-runs (same upstream PR → same remediation branch/PR; comment upsert)
 - [x] CI eval stays green (fixture)
-- [x] README secrets / URN mapping (`.cascade/config.json`)
+- [x] README secrets / URN mapping / Production section
 
 ---
 
@@ -178,7 +178,13 @@ Original hackathon MVP progress stays in [progress.md](./progress.md). This file
 - Git Data API: branch `cascade/remediation/{pr}` + commit rewritten SQL + open/update PR.
 - `CASCADE_OPEN_DOWNSTREAM_PR=1` happy path; `CASCADE_DOWNSTREAM_HEAD` optional override.
 - Source comment + DataHub plan link remediation URL; `cascade-migrated.yml` on merge.
+- Merged as PR #16.
+
+### 2026-08-09 — Phase 5
+
+- `--mode dry-run|apply`; policy gate for high-without-remediation; comment upsert; `cascade/runs/<id>/`; Action step summary.
+- Skipped: dialect profiles, large golden expansion (YAGNI for now).
 
 ### 2026-08-09 — next
 
-- Phase 5 hardening (policy check, idempotent comments, audit dir).
+- Phase 6/7 optional: MCP deepen, Skill PR, video/Devpost.
