@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cascade.config import CascadeConfig, load_config, resolve_urn
+from cascade.config import CascadeConfig, load_config, resolve_model_path, resolve_urn
 from cascade.diff_parser import changed_paths
 
 
@@ -94,6 +94,53 @@ class TestConfig(unittest.TestCase):
         cfg = load_config("/nonexistent/cascade-config.json")
         self.assertEqual(cfg.mappings, [])
         self.assertIsNone(cfg.default_urn)
+
+
+class TestResolveModelPath(unittest.TestCase):
+    def test_urn_files_explicit(self):
+        with tempfile.TemporaryDirectory() as td:
+            nested = Path(td) / "models" / "marts"
+            nested.mkdir(parents=True)
+            f = nested / "fct_orders.sql"
+            f.write_text("select 1")
+            urn = "urn:li:dataset:(urn:li:dataPlatform:postgres,db.public.fct_orders,PROD)"
+            got = resolve_model_path(
+                urn,
+                Path(td) / "models",
+                {urn: str(f)},
+            )
+            self.assertEqual(got, f)
+
+    def test_recursive_search(self):
+        with tempfile.TemporaryDirectory() as td:
+            nested = Path(td) / "models" / "staging"
+            nested.mkdir(parents=True)
+            f = nested / "stg_orders.sql"
+            f.write_text("select user_id from raw")
+            urn = "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.stg_orders,PROD)"
+            got = resolve_model_path(urn, Path(td) / "models", {})
+            self.assertEqual(got, f)
+
+    def test_flat_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "models"
+            root.mkdir()
+            f = root / "raw_orders.sql"
+            f.write_text("select 1")
+            urn = "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.raw_orders,PROD)"
+            self.assertEqual(resolve_model_path(urn, root, {}), f)
+
+    def test_load_urn_files(self):
+        raw = {
+            "urn_files": {
+                "urn:a": "models/marts/a.sql",
+            }
+        }
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "config.json"
+            path.write_text(json.dumps(raw))
+            cfg = load_config(path)
+        self.assertEqual(cfg.urn_files["urn:a"], "models/marts/a.sql")
 
 
 if __name__ == "__main__":

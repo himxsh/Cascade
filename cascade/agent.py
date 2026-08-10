@@ -17,6 +17,7 @@ from typing import Any
 from urllib.error import URLError, HTTPError
 from urllib.request import Request, urlopen
 
+from cascade.config import load_config, resolve_model_path
 from cascade.schema_gate import validate_sql
 from cascade.rewrite import rename_column
 
@@ -24,14 +25,12 @@ _LLM_CHAT_URL_RE = re.compile(r"^(https?://.+)/chat/completions$")
 _DEFAULT_MODEL = "gpt-4o-mini"
 
 
-def _model_path_for_urn(urn: str, models_dir: str | Path) -> Path | None:
-    parts = urn.split(",")
-    if len(parts) < 2:
-        return None
-    name = parts[1].rstrip(")")
-    stem = name.split(".")[-1]
-    p = Path(models_dir) / f"{stem}.sql"
-    return p if p.exists() else None
+def _model_path_for_urn(
+    urn: str,
+    models_dir: str | Path | None,
+    urn_files: dict[str, str] | None = None,
+) -> Path | None:
+    return resolve_model_path(urn, models_dir, urn_files)
 
 
 def _get_new_column_names(changes: list[dict[str, Any]]) -> set[str]:
@@ -84,6 +83,7 @@ def _demo_choose_and_rewrite(
     catalog: dict[str, Any],
     models_dir: str | Path | None,
     source_urn: str | None,
+    urn_files: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     remediations: list[dict[str, Any]] = []
     datasets_by_urn = catalog.get("datasets_by_urn", {})
@@ -101,7 +101,7 @@ def _demo_choose_and_rewrite(
         allowed_base = _allowed_columns(catalog, urn, changes)
 
         for old_name, new_name in renames.items():
-            model_path = _model_path_for_urn(urn, models_dir) if models_dir else None
+            model_path = _model_path_for_urn(urn, models_dir, urn_files)
             if model_path:
                 sql = model_path.read_text()
                 if old_name in sql:
@@ -266,8 +266,10 @@ def choose_and_rewrite(
     catalog: dict[str, Any],
     models_dir: str | Path | None = None,
     source_urn: str | None = None,
+    urn_files: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    demo = _demo_choose_and_rewrite(changes, catalog, models_dir, source_urn)
+    files = urn_files if urn_files is not None else load_config().urn_files
+    demo = _demo_choose_and_rewrite(changes, catalog, models_dir, source_urn, files)
     api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if not api_key:
         _log_agent("agent=deterministic reason=no_api_key")
@@ -281,7 +283,7 @@ def choose_and_rewrite(
     used_llm = False
     for urn in _all_downstream_urns(catalog, source_urn):
         fallback = demo_by_urn.get(urn) or []
-        model_path = _model_path_for_urn(urn, models_dir) if models_dir else None
+        model_path = _model_path_for_urn(urn, models_dir, files)
         model_sql = model_path.read_text() if model_path else None
         allowed = _allowed_columns(catalog, urn, changes)
         ds = catalog.get("datasets_by_urn", {}).get(urn, {})

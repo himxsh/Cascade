@@ -14,6 +14,7 @@ class CascadeConfig:
     mappings: list[tuple[str, str]] = field(default_factory=list)  # (path_prefix, urn)
     default_urn: str | None = None
     models_dir: str | None = None
+    urn_files: dict[str, str] = field(default_factory=dict)  # urn → SQL path
 
 
 def _normalize_prefix(path: str) -> str:
@@ -53,11 +54,53 @@ def _parse(data: dict[str, Any]) -> CascadeConfig:
     mappings.sort(key=lambda p: len(p[0]), reverse=True)
     default_urn = data.get("default_urn") or data.get("urn")
     models_dir = data.get("models_dir")
+    urn_files: dict[str, str] = {}
+    raw_files = data.get("urn_files") or {}
+    if isinstance(raw_files, dict):
+        for urn, fpath in raw_files.items():
+            urn_files[str(urn)] = _normalize_prefix(str(fpath))
     return CascadeConfig(
         mappings=mappings,
         default_urn=str(default_urn) if default_urn else None,
         models_dir=str(models_dir) if models_dir else None,
+        urn_files=urn_files,
     )
+
+
+def _urn_stem(urn: str) -> str | None:
+    """Last segment of the dataset name inside a dataset URN."""
+    parts = urn.split(",")
+    if len(parts) < 2:
+        return None
+    name = parts[1].rstrip(")")
+    return name.split(".")[-1] or None
+
+
+def resolve_model_path(
+    urn: str,
+    models_dir: str | Path | None,
+    urn_files: dict[str, str] | None = None,
+) -> Path | None:
+    """Map dataset URN → SQL file: explicit urn_files → recursive search → flat path."""
+    if urn_files and urn in urn_files:
+        p = Path(urn_files[urn])
+        return p if p.is_file() else None
+    if not models_dir:
+        return None
+    stem = _urn_stem(urn)
+    if not stem:
+        return None
+    root = Path(models_dir)
+    if not root.is_dir():
+        flat = root / f"{stem}.sql"
+        return flat if flat.is_file() else None
+    matches = sorted(
+        (p for p in root.rglob(f"{stem}.sql") if p.is_file()),
+        key=lambda p: (len(p.parts), str(p)),
+    )
+    if matches:
+        return matches[0]
+    return None
 
 
 def resolve_urn(
