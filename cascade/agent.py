@@ -251,7 +251,26 @@ def _call_llm(
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
-        "response_format": {"type": "json_object"},
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "cascade_remediation",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "strategy": {
+                            "type": "string",
+                            "enum": ["rewrite", "adapter_view", "deprecate"],
+                        },
+                        "rationale": {"type": "string"},
+                        "sql": {"type": ["string", "null"]},
+                    },
+                    "required": ["strategy", "rationale", "sql"],
+                    "additionalProperties": False,
+                },
+            },
+        },
     }).encode()
 
     req = Request(

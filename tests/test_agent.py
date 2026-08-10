@@ -39,7 +39,7 @@ class TestRewrite(unittest.TestCase):
 
 
 class TestLlmTransport(unittest.TestCase):
-    def test_requests_json_response_format(self):
+    def test_requests_strict_remediation_schema(self):
         response = mock.MagicMock()
         response.read.return_value = json.dumps({
             "choices": [{
@@ -59,9 +59,12 @@ class TestLlmTransport(unittest.TestCase):
                 parsed, meta = _call_llm([], [], None)
 
         request = urlopen.call_args.args[0]
+        response_format = json.loads(request.data)["response_format"]
+        self.assertEqual(response_format["type"], "json_schema")
+        self.assertTrue(response_format["json_schema"]["strict"])
         self.assertEqual(
-            json.loads(request.data)["response_format"],
-            {"type": "json_object"},
+            response_format["json_schema"]["schema"]["required"],
+            ["strategy", "rationale", "sql"],
         )
         self.assertEqual(parsed["strategy"], "deprecate")
         self.assertTrue(meta["ok"])
