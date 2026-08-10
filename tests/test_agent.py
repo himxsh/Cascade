@@ -55,6 +55,14 @@ class TestSchemaGate(unittest.TestCase):
         allowed = {"order_id", "amount", "customer_id"}
         validate_sql(sql, allowed)
 
+    def test_ignores_line_comments(self):
+        sql = "-- Staging: clean raw orders for downstream marts.\nSELECT customer_id FROM t"
+        validate_sql(sql, {"customer_id"})
+
+    def test_ignores_three_part_table_name(self):
+        sql = "SELECT customer_id FROM cascade_shop.public.raw_orders"
+        validate_sql(sql, {"customer_id"})
+
 
 class TestDemoAgent(unittest.TestCase):
     @classmethod

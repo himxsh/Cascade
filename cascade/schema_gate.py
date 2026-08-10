@@ -22,17 +22,25 @@ _SQL_KEYWORDS: frozenset[str] = frozenset({
 })
 
 _IDENTIFIER_RE = re.compile(r'[a-zA-Z_]\w*')
-_QUALIFIED_RE = re.compile(r'([a-zA-Z_]\w*)\.([a-zA-Z_]\w*)')
+_QUALIFIED_CHAIN_RE = re.compile(r'[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+')
+_LINE_COMMENT_RE = re.compile(r'--.*?$', re.MULTILINE)
+_BLOCK_COMMENT_RE = re.compile(r'/\*.*?\*/', re.DOTALL)
 
 
-# ponytail: naive word-token scan, no SQL parser. Single-char aliases and
-#   qualified refs (t.col pass through). Upgrades: sqlparse-based AST visitor.
+def _strip_sql_comments(sql: str) -> str:
+    sql = _BLOCK_COMMENT_RE.sub(' ', sql)
+    return _LINE_COMMENT_RE.sub(' ', sql)
+
+
+# ponytail: naive word-token scan, no SQL parser. Comments stripped; dotted
+#   table refs (db.schema.table) treated as qualified. Upgrade: sqlparse AST.
 def validate_sql(sql: str, allowed_columns: AbstractSet[str]) -> None:
+    sql = _strip_sql_comments(sql)
     identifiers = set(_IDENTIFIER_RE.findall(sql))
     qualified: set[str] = set()
-    for m in _QUALIFIED_RE.finditer(sql):
-        qualified.add(m.group(1))
-        qualified.add(m.group(2))
+    for m in _QUALIFIED_CHAIN_RE.finditer(sql):
+        for part in m.group(0).split('.'):
+            qualified.add(part)
     allowed_lower = {c.lower() for c in allowed_columns}
     unknown: list[str] = sorted(
         i for i in identifiers
