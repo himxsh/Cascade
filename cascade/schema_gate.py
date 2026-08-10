@@ -23,6 +23,7 @@ _SQL_KEYWORDS: frozenset[str] = frozenset({
 
 _IDENTIFIER_RE = re.compile(r'[a-zA-Z_]\w*')
 _QUALIFIED_CHAIN_RE = re.compile(r'[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+')
+_AS_ALIAS_RE = re.compile(r'\bAS\s+([a-zA-Z_]\w*)', re.IGNORECASE)
 _LINE_COMMENT_RE = re.compile(r'--.*?$', re.MULTILINE)
 _BLOCK_COMMENT_RE = re.compile(r'/\*.*?\*/', re.DOTALL)
 
@@ -33,19 +34,21 @@ def _strip_sql_comments(sql: str) -> str:
 
 
 # ponytail: naive word-token scan, no SQL parser. Comments stripped; dotted
-#   table refs (db.schema.table) treated as qualified. Upgrade: sqlparse AST.
+#   table refs + AS aliases pass. Upgrade: sqlparse AST.
 def validate_sql(sql: str, allowed_columns: AbstractSet[str]) -> None:
     sql = _strip_sql_comments(sql)
     identifiers = set(_IDENTIFIER_RE.findall(sql))
-    qualified: set[str] = set()
+    skip: set[str] = set()
     for m in _QUALIFIED_CHAIN_RE.finditer(sql):
         for part in m.group(0).split('.'):
-            qualified.add(part)
+            skip.add(part)
+    for m in _AS_ALIAS_RE.finditer(sql):
+        skip.add(m.group(1))
     allowed_lower = {c.lower() for c in allowed_columns}
     unknown: list[str] = sorted(
         i for i in identifiers
         if len(i) > 1
-        and i not in qualified
+        and i not in skip
         and i.lower() not in allowed_lower
         and i.upper() not in _SQL_KEYWORDS
     )

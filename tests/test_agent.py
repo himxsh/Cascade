@@ -63,6 +63,10 @@ class TestSchemaGate(unittest.TestCase):
         sql = "SELECT customer_id FROM cascade_shop.public.raw_orders"
         validate_sql(sql, {"customer_id"})
 
+    def test_ignores_as_alias(self):
+        sql = "SELECT customer_id AS customer_key FROM cascade_shop.public.stg_orders"
+        validate_sql(sql, {"customer_id"})
+
 
 class TestDemoAgent(unittest.TestCase):
     @classmethod
