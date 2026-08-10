@@ -1,8 +1,11 @@
 """Agent: choose remediation strategy + rewrite downstream SQL.
 
-When LLM_API_KEY / OPENAI_API_KEY is set, the LLM owns strategy + SQL.
-Deterministic demo agent is fallback on missing key, timeout, parse failure,
-or schema-gate rejection of LLM SQL.
+LLM is primary when LLM_API_KEY / OPENAI_API_KEY is set.
+Deterministic rewrite is used only when:
+  - no API key
+  - LLM transport/parse failure
+  - schema-gate rejects LLM SQL
+  - latency exceeds LLM_MAX_LATENCY_MS (or request hits LLM_TIMEOUT_SEC)
 """
 
 from __future__ import annotations
@@ -23,6 +26,28 @@ from cascade.rewrite import rename_column
 
 _LLM_CHAT_URL_RE = re.compile(r"^(https?://.+)/chat/completions$")
 _DEFAULT_MODEL = "gpt-4o-mini"
+_DEFAULT_TIMEOUT_SEC = 15
+_DEFAULT_MAX_LATENCY_MS = 15_000
+
+
+def _llm_timeout_sec() -> float:
+    raw = os.environ.get("LLM_TIMEOUT_SEC", "").strip()
+    if raw:
+        try:
+            return max(1.0, float(raw))
+        except ValueError:
+            pass
+    return float(_DEFAULT_TIMEOUT_SEC)
+
+
+def _llm_max_latency_ms() -> int:
+    raw = os.environ.get("LLM_MAX_LATENCY_MS", "").strip()
+    if raw:
+        try:
+            return max(1000, int(raw))
+        except ValueError:
+            pass
+    return int(_DEFAULT_MAX_LATENCY_MS)
 
 
 def _model_path_for_urn(
@@ -207,7 +232,7 @@ def _call_llm(
     )
     t0 = time.monotonic()
     try:
-        with urlopen(req, timeout=30) as resp:
+        with urlopen(req, timeout=_llm_timeout_sec()) as resp:
             data = json.loads(resp.read().decode())
         meta["latency_ms"] = int((time.monotonic() - t0) * 1000)
         text = data["choices"][0]["message"]["content"]
@@ -216,6 +241,9 @@ def _call_llm(
             cleaned = cleaned.split("\n", 1)[1]
             cleaned = cleaned.rsplit("```", 1)[0]
         parsed = json.loads(cleaned.strip())
+        if meta["latency_ms"] > _llm_max_latency_ms():
+            meta["error"] = "latency_budget"
+            return None, meta
         meta["ok"] = True
         return parsed, meta
     except (TimeoutError, URLError, HTTPError, json.JSONDecodeError, KeyError, IndexError, TypeError) as e:
@@ -260,7 +288,7 @@ def _rem_from_llm(
     }
 
 
-# ponytail: OpenAI-compatible HTTP; swap provider via LLM_BASE_URL / LLM_MODEL
+# ponytail: OpenAI-compatible HTTP; Bedrock Mantle / OpenAI via LLM_BASE_URL + LLM_MODEL
 def choose_and_rewrite(
     changes: list[dict[str, Any]],
     catalog: dict[str, Any],
@@ -268,6 +296,7 @@ def choose_and_rewrite(
     source_urn: str | None = None,
     urn_files: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
+    """LLM-primary remediations when keyed; deterministic only as fallback."""
     files = urn_files if urn_files is not None else load_config().urn_files
     demo = _demo_choose_and_rewrite(changes, catalog, models_dir, source_urn, files)
     api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")

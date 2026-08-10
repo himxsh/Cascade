@@ -88,11 +88,13 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 | `GITHUB_TOKEN` / `GITHUB_REPOSITORY` / `CASCADE_PR_NUMBER` | Live PR comment | Action sets these on `pull_request` |
 | `CASCADE_DOWNSTREAM_HEAD` / `CASCADE_DOWNSTREAM_BASE` | Live downstream PR (override) | Optional pre-pushed head; prefer `CASCADE_OPEN_DOWNSTREAM_PR` |
 | `CASCADE_OPEN_DOWNSTREAM_PR=1` | Auto remediation PR via Git Data API | Action `pr-impact` sets this; creates `cascade/remediation/{pr}` |
-| `LLM_API_KEY` or `OPENAI_API_KEY` | LLM-primary strategy/rewrite | Deterministic demo agent when unset |
-| `LLM_BASE_URL` | Optional OpenAI-compatible base | Default `https://api.openai.com/v1` |
-| `LLM_MODEL` | Optional chat model id | Default `gpt-4o-mini` |
+| `LLM_API_KEY` or `OPENAI_API_KEY` | LLM-primary strategy/rewrite | Deterministic only if unset / fail / slow |
+| `LLM_BASE_URL` | OpenAI-compatible base | Default Bedrock Mantle in `.env.example` |
+| `LLM_MODEL` | Chat model id | e.g. `qwen.qwen3-coder-480b-a35b-v1:0` |
+| `LLM_TIMEOUT_SEC` | HTTP timeout | Default `15` |
+| `LLM_MAX_LATENCY_MS` | Soft latency budget | Default `15000`; over budget → deterministic |
 
-**LLM cost / latency:** When a key is set, Cascade calls the chat API once per downstream node (timeout 30s). Expect ~1–3s and a fraction of a cent per node on `gpt-4o-mini`; failures (timeout/parse/schema-gate) fall back to the deterministic rewrite with a stderr notice. Unset the key for offline/CI deterministic runs.
+**LLM cost / latency:** When a key is set, Cascade calls the chat API once per downstream node. LLM is the default path; deterministic rename is used only on missing key, transport/parse errors, schema-gate rejection, timeout, or latency over `LLM_MAX_LATENCY_MS`. Unset the key for offline/CI deterministic runs.
 
 Repo secrets for live Actions: `DATAHUB_GMS_URL`, `DATAHUB_TOKEN`, `LLM_API_KEY`. Optional repo variable: `CASCADE_SOURCE_URN`. Smoke job: [`.github/workflows/gms-smoke.yml`](.github/workflows/gms-smoke.yml).
 

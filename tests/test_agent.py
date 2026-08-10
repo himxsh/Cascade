@@ -209,8 +209,26 @@ class TestLlmPrimary(unittest.TestCase):
         self.assertTrue(all(r.get("agent") == "deterministic" for r in remediations))
         self.assertTrue(any(r["strategy"] == "rewrite" for r in remediations))
 
-
-class TestGenerateCLI(unittest.TestCase):
+    def test_llm_high_latency_falls_back(self):
+        changes = [
+            {"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id",
+             "detected_by": "heuristic"}
+        ]
+        with mock.patch.dict(
+            os.environ,
+            {"LLM_API_KEY": "test-key", "LLM_MAX_LATENCY_MS": "1000"},
+            clear=False,
+        ):
+            with mock.patch("cascade.agent._call_llm", return_value=(None, {
+                "model": "qwen", "latency_ms": 16000, "ok": False, "error": "latency_budget",
+            })):
+                remediations = choose_and_rewrite(
+                    changes=changes,
+                    catalog=self.catalog,
+                    models_dir=str(MODELS_DIR),
+                    source_urn=RAW_URN,
+                )
+        self.assertTrue(all(r.get("agent") == "deterministic" for r in remediations))
     def setUp(self):
         self.tmp_dir = Path("/tmp/_cascade_test_gen")
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
