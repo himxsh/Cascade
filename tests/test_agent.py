@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cascade.agent import choose_and_rewrite
+from cascade.agent import _call_llm, choose_and_rewrite
 from cascade.cli import cmd_generate
 from cascade.datahub_fixture import load_catalog
 from cascade.rewrite import rename_column
@@ -36,6 +36,35 @@ class TestRewrite(unittest.TestCase):
         result = rename_column(sql, "user_id", "customer_id")
         self.assertIn("customer_id", result)
         self.assertNotIn("user_id", result)
+
+
+class TestLlmTransport(unittest.TestCase):
+    def test_requests_json_response_format(self):
+        response = mock.MagicMock()
+        response.read.return_value = json.dumps({
+            "choices": [{
+                "message": {
+                    "content": json.dumps({
+                        "strategy": "deprecate",
+                        "rationale": "test",
+                        "sql": None,
+                    })
+                }
+            }]
+        }).encode()
+        response.__enter__.return_value = response
+
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
+            with mock.patch("cascade.agent.urlopen", return_value=response) as urlopen:
+                parsed, meta = _call_llm([], [], None)
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(
+            json.loads(request.data)["response_format"],
+            {"type": "json_object"},
+        )
+        self.assertEqual(parsed["strategy"], "deprecate")
+        self.assertTrue(meta["ok"])
 
 
 class TestSchemaGate(unittest.TestCase):
