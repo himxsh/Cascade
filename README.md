@@ -89,8 +89,8 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. ML features/m
 | `CASCADE_DOWNSTREAM_HEAD` / `CASCADE_DOWNSTREAM_BASE` | Live downstream PR (override) | Optional pre-pushed head; prefer `CASCADE_OPEN_DOWNSTREAM_PR` |
 | `CASCADE_OPEN_DOWNSTREAM_PR=1` | Auto remediation PR via Git Data API | Action `pr-impact` sets this; creates `cascade/remediation/{pr}` |
 | `LLM_API_KEY` or `OPENAI_API_KEY` | LLM-primary strategy/rewrite | Deterministic only if unset / fail / slow |
-| `LLM_BASE_URL` | OpenAI-compatible base | Default Bedrock Mantle in `.env.example` |
-| `LLM_MODEL` | Chat model id | e.g. `qwen.qwen3-coder-480b-a35b-v1:0` |
+| `LLM_BASE_URL` | Chat API base (OpenAI-compatible) | Default Bedrock Mantle |
+| `LLM_MODEL` | Chat model id | Default `qwen.qwen3-coder-480b-a35b-v1:0` |
 | `LLM_TIMEOUT_SEC` | HTTP timeout | Default `15` |
 | `LLM_MAX_LATENCY_MS` | Soft latency budget | Default `15000`; over budget → deterministic |
 

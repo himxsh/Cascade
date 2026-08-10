@@ -154,7 +154,7 @@ class TestLlmPrimary(unittest.TestCase):
         }
         with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
             with mock.patch("cascade.agent._call_llm", return_value=(fake, {
-                "model": "gpt-4o-mini", "latency_ms": 12, "ok": True, "error": None,
+                "model": "qwen.qwen3-coder-480b-a35b-v1:0", "latency_ms": 12, "ok": True, "error": None,
             })):
                 remediations = choose_and_rewrite(
                     changes=changes,
@@ -179,7 +179,7 @@ class TestLlmPrimary(unittest.TestCase):
         }
         with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
             with mock.patch("cascade.agent._call_llm", return_value=(fake, {
-                "model": "gpt-4o-mini", "latency_ms": 5, "ok": True, "error": None,
+                "model": "qwen.qwen3-coder-480b-a35b-v1:0", "latency_ms": 5, "ok": True, "error": None,
             })):
                 remediations = choose_and_rewrite(
                     changes=changes,
@@ -198,7 +198,7 @@ class TestLlmPrimary(unittest.TestCase):
         ]
         with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
             with mock.patch("cascade.agent._call_llm", return_value=(None, {
-                "model": "gpt-4o-mini", "latency_ms": 30000, "ok": False, "error": "TimeoutError",
+                "model": "qwen.qwen3-coder-480b-a35b-v1:0", "latency_ms": 30000, "ok": False, "error": "TimeoutError",
             })):
                 remediations = choose_and_rewrite(
                     changes=changes,
@@ -220,7 +220,7 @@ class TestLlmPrimary(unittest.TestCase):
             clear=False,
         ):
             with mock.patch("cascade.agent._call_llm", return_value=(None, {
-                "model": "qwen", "latency_ms": 16000, "ok": False, "error": "latency_budget",
+                "model": "qwen.qwen3-coder-480b-a35b-v1:0", "latency_ms": 16000, "ok": False, "error": "latency_budget",
             })):
                 remediations = choose_and_rewrite(
                     changes=changes,

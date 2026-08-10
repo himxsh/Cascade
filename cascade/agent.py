@@ -25,7 +25,8 @@ from cascade.schema_gate import validate_sql
 from cascade.rewrite import rename_column
 
 _LLM_CHAT_URL_RE = re.compile(r"^(https?://.+)/chat/completions$")
-_DEFAULT_MODEL = "gpt-4o-mini"
+_DEFAULT_MODEL = "qwen.qwen3-coder-480b-a35b-v1:0"
+_DEFAULT_BASE_URL = "https://bedrock-mantle.us-east-1.api.aws/v1"
 _DEFAULT_TIMEOUT_SEC = 15
 _DEFAULT_MAX_LATENCY_MS = 15_000
 
@@ -197,7 +198,7 @@ def _call_llm(
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """Returns (parsed_json_or_None, meta). Meta never includes secrets."""
     api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    base_url = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    base_url = os.environ.get("LLM_BASE_URL", _DEFAULT_BASE_URL).rstrip("/")
     model = os.environ.get("LLM_MODEL", _DEFAULT_MODEL)
     meta: dict[str, Any] = {"model": model, "latency_ms": None, "ok": False, "error": None}
     if not api_key:
@@ -288,7 +289,7 @@ def _rem_from_llm(
     }
 
 
-# ponytail: OpenAI-compatible HTTP; Bedrock Mantle / OpenAI via LLM_BASE_URL + LLM_MODEL
+# ponytail: OpenAI-compatible HTTP; default = Bedrock Mantle Qwen via LLM_BASE_URL + LLM_MODEL
 def choose_and_rewrite(
     changes: list[dict[str, Any]],
     catalog: dict[str, Any],
