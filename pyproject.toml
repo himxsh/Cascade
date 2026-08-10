@@ -12,6 +12,9 @@ license = { text = "Apache-2.0" }
 [tool.setuptools]
 packages = ["cascade"]
 
+[tool.setuptools.package-data]
+cascade = ["prompts/*.md"]
+
 [project.scripts]
 cascade = "cascade.cli:main"
 
