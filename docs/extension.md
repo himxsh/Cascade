@@ -87,8 +87,9 @@ Do in order. Later items assume earlier ones exist.
 
 **Improve file resolution:**
 
-- Today: URN `…,analytics.fct_orders,PROD` → `models_dir/fct_orders.sql`
-- Needed: allow explicit `urn → path` in config, or dbt-style nested paths (`models/marts/fct_orders.sql`), so real repos aren’t forced into flat filenames.
+- Shipped: `urn_files` in `.cascade/config.json`, then recursive `{stem}.sql` under `models_dir`, then flat path — see `cascade.config.resolve_model_path`
+- Reference consumer: [himxsh/cascade-shop](https://github.com/himxsh/cascade-shop) (Postgres + nested models + live Action)
+- Template workflow: [examples/github-action/](../examples/github-action/)
 
 **Done when:** README “BYO repo” section shows one real-looking config (not demo URNs only), and a nested model path can be remapped without renaming files.
 
