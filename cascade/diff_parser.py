@@ -101,7 +101,15 @@ def parse_diff(text: str) -> list[dict[str, Any]]:
 
     all_changes: list[dict[str, Any]] = []
     for section in sections:
-        all_changes.extend(_parse_file_section(section))
+        path = None
+        first = section.splitlines()[0] if section.splitlines() else ""
+        m = re.match(r"\s*a/(.+?)\s+b/(.+)$", first)
+        if m:
+            path = m.group(2)
+        for change in _parse_file_section(section):
+            if path:
+                change = {**change, "path": path}
+            all_changes.append(change)
 
     return all_changes
 

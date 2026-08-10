@@ -111,22 +111,65 @@ def resolve_urn(
     env: str | None = None,
 ) -> str:
     """Resolve source dataset URN: explicit → path mapping → env → default_urn."""
+    urns = resolve_urns(paths, config, explicit=explicit, env=env)
+    return urns[0]
+
+
+def resolve_urns(
+    paths: list[str],
+    config: CascadeConfig,
+    *,
+    explicit: str | None = None,
+    env: str | None = None,
+) -> list[str]:
+    """Resolve one or more source URNs for a multi-file change set (stable order)."""
     if explicit:
-        return explicit
+        return [explicit]
+    found: list[str] = []
+    seen: set[str] = set()
     for path in paths:
         norm = _normalize_prefix(path)
+        matched: str | None = None
         for prefix, urn in config.mappings:
             p = prefix.rstrip("/")
             if not p:
                 continue
             if norm == p or norm.startswith(p + "/"):
-                return urn
+                matched = urn
+                break
+        if matched and matched not in seen:
+            seen.add(matched)
+            found.append(matched)
     env_urn = env if env is not None else os.environ.get("CASCADE_SOURCE_URN")
-    if env_urn:
-        return env_urn
-    if config.default_urn:
-        return config.default_urn
-    raise SystemExit(
-        "cascade: cannot resolve source URN — pass --urn, set CASCADE_SOURCE_URN, "
-        "or add a path mapping / default_urn in .cascade/config.json"
-    )
+    if not found and env_urn:
+        return [env_urn]
+    if not found and config.default_urn:
+        return [config.default_urn]
+    if not found:
+        raise SystemExit(
+            "cascade: cannot resolve source URN — pass --urn, set CASCADE_SOURCE_URN, "
+            "or add a path mapping / default_urn in .cascade/config.json"
+        )
+    return found
+
+
+def changes_for_urn(
+    changes: list[dict[str, Any]],
+    urn: str,
+    config: CascadeConfig,
+) -> list[dict[str, Any]]:
+    """Filter diff changes that belong to files mapped to this source URN."""
+    out: list[dict[str, Any]] = []
+    for change in changes:
+        path = change.get("path")
+        if not path:
+            # JSON / pathless changes apply to every resolved source
+            out.append({k: v for k, v in change.items() if k != "path"})
+            continue
+        try:
+            mapped = resolve_urn([str(path)], config)
+        except SystemExit:
+            continue
+        if mapped == urn:
+            out.append({k: v for k, v in change.items() if k != "path"})
+    return out

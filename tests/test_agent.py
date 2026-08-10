@@ -67,6 +67,46 @@ class TestSchemaGate(unittest.TestCase):
         sql = "SELECT customer_id AS customer_key FROM cascade_shop.public.stg_orders"
         validate_sql(sql, {"customer_id"})
 
+    def test_rejects_invented_qualified_column(self):
+        sql = "SELECT i.line_amount_usd_cents FROM stg_order_items i"
+        with self.assertRaises(ValueError):
+            validate_sql(sql, {"line_amount_cents", "order_id"})
+
+    def test_passes_qualified_allowed_column(self):
+        sql = "SELECT i.line_amount_cents FROM stg_order_items i"
+        validate_sql(sql, {"line_amount_cents"})
+
+
+class TestRenameSemantics(unittest.TestCase):
+    def test_rejects_wrong_direction_alias(self):
+        from cascade.schema_gate import validate_rename_semantics
+
+        changes = [{"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id"}]
+        with self.assertRaises(ValueError):
+            validate_rename_semantics(
+                "SELECT user_id AS customer_id FROM raw_orders", changes
+            )
+
+    def test_allows_compat_alias(self):
+        from cascade.schema_gate import validate_rename_semantics
+
+        changes = [{"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id"}]
+        validate_rename_semantics(
+            "SELECT customer_id AS user_id FROM raw_orders", changes
+        )
+
+    def test_rejects_unrelated_alias_to_rename_target(self):
+        from cascade.schema_gate import validate_rename_semantics
+
+        changes = [
+            {"type": "FIELD_RENAMED", "from": "amount_cents", "to": "amount_usd_cents"}
+        ]
+        with self.assertRaises(ValueError):
+            validate_rename_semantics(
+                "SELECT i.line_amount_cents AS amount_usd_cents FROM items i",
+                changes,
+            )
+
 
 class TestDemoAgent(unittest.TestCase):
     @classmethod

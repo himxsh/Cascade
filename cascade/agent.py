@@ -21,14 +21,26 @@ from urllib.error import URLError, HTTPError
 from urllib.request import Request, urlopen
 
 from cascade.config import load_config, resolve_model_path
-from cascade.schema_gate import validate_sql
+from cascade.schema_gate import validate_rename_semantics, validate_sql
 from cascade.rewrite import rename_column
 
 _LLM_CHAT_URL_RE = re.compile(r"^(https?://.+)/chat/completions$")
-_DEFAULT_MODEL = "qwen.qwen3-coder-480b-a35b-v1:0"
+_DEFAULT_MODEL = "deepseek.v3.2"
 _DEFAULT_BASE_URL = "https://bedrock-mantle.us-east-1.api.aws/v1"
 _DEFAULT_TIMEOUT_SEC = 15
 _DEFAULT_MAX_LATENCY_MS = 15_000
+_REWRITE_SKILL_PATH = Path(__file__).resolve().parent / "prompts" / "rewrite_skill.md"
+
+
+def _rewrite_skill_text() -> str:
+    try:
+        return _REWRITE_SKILL_PATH.read_text()
+    except OSError:
+        return (
+            "Closed world: edit only what Changes lists. Read new upstream "
+            "names; never from AS to; never invent lookalike renames; "
+            "prefer adapter_view/deprecate over guessing."
+        )
 
 
 def _llm_timeout_sec() -> float:
@@ -59,12 +71,13 @@ def _model_path_for_urn(
     return resolve_model_path(urn, models_dir, urn_files)
 
 
-def _get_new_column_names(changes: list[dict[str, Any]]) -> set[str]:
+def _change_column_names(changes: list[dict[str, Any]]) -> set[str]:
     names: set[str] = set()
     for c in changes:
-        to = c.get("to")
-        if to:
-            names.add(to)
+        for key in ("from", "to"):
+            val = c.get(key)
+            if val:
+                names.add(str(val))
     return names
 
 
@@ -87,17 +100,38 @@ def _all_downstream_urns(catalog: dict[str, Any], source_urn: str | None) -> lis
     return all_downstream
 
 
+def _upstream_urns(catalog: dict[str, Any], urn: str) -> list[str]:
+    """Transitive upstreams via inverted downstream_map."""
+    downstream_map = catalog.get("downstream_map", {})
+    parents: dict[str, list[str]] = {}
+    for src, children in downstream_map.items():
+        for child in children:
+            parents.setdefault(child, []).append(src)
+    out: list[str] = []
+    seen: set[str] = set()
+    queue = list(parents.get(urn, []))
+    while queue:
+        cur = queue.pop(0)
+        if cur in seen:
+            continue
+        seen.add(cur)
+        out.append(cur)
+        queue.extend(parents.get(cur, []))
+    return out
+
+
 def _allowed_columns(
     catalog: dict[str, Any], urn: str, changes: list[dict[str, Any]]
 ) -> set[str]:
+    # Own fields + transitive upstream fields + explicit rename endpoints.
+    # ponytail: not whole-catalog — that let unrelated rename targets pass.
     datasets_by_urn = catalog.get("datasets_by_urn", {})
-    ds = datasets_by_urn.get(urn, {})
-    schema_fields = {f["name"] for f in ds.get("schema_fields", [])}
-    all_catalog_cols: set[str] = set()
-    for d in datasets_by_urn.values():
-        for f in d.get("schema_fields", []):
-            all_catalog_cols.add(f["name"])
-    return schema_fields | _get_new_column_names(changes) | all_catalog_cols
+    names: set[str] = set()
+    for u in [urn, *_upstream_urns(catalog, urn)]:
+        ds = datasets_by_urn.get(u, {})
+        for f in ds.get("schema_fields", []):
+            names.add(f["name"])
+    return names | _change_column_names(changes)
 
 
 def _log_agent(msg: str) -> None:
@@ -206,10 +240,7 @@ def _call_llm(
         return None, meta
 
     prompt = (
-        "You are a schema migration assistant. Given a schema change and a downstream "
-        "model SQL file, select a remediation strategy and produce rewritten SQL.\n\n"
-        "Return JSON with keys: strategy (one of rewrite, adapter_view, deprecate), "
-        "rationale (one-line why), sql (rewritten SQL if strategy is rewrite, else null).\n\n"
+        f"{_rewrite_skill_text().strip()}\n\n"
         f"Changes: {json.dumps(changes)}\n"
         f"Downstream info: {json.dumps(downstream_info)}\n"
     )
@@ -263,6 +294,7 @@ def _rem_from_llm(
     *,
     model_path: Path | None,
     allowed: set[str],
+    changes: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     strategy = llm.get("strategy")
     if strategy not in ("rewrite", "adapter_view", "deprecate"):
@@ -272,7 +304,9 @@ def _rem_from_llm(
         rewritten = llm.get("sql")
         if not rewritten or not model_path:
             return None
-        validate_sql(rewritten, allowed)  # raises ValueError → caller falls back
+        # raises ValueError → caller falls back to deterministic
+        validate_sql(rewritten, allowed)
+        validate_rename_semantics(rewritten, changes)
         return {
             "urn": urn,
             "path": str(model_path),
@@ -289,7 +323,7 @@ def _rem_from_llm(
     }
 
 
-# ponytail: OpenAI-compatible HTTP; default = Bedrock Mantle Qwen via LLM_BASE_URL + LLM_MODEL
+# ponytail: OpenAI-compatible HTTP; default = Bedrock Mantle DeepSeek via LLM_BASE_URL + LLM_MODEL
 def choose_and_rewrite(
     changes: list[dict[str, Any]],
     catalog: dict[str, Any],
@@ -331,7 +365,9 @@ def choose_and_rewrite(
             continue
 
         try:
-            rem = _rem_from_llm(urn, llm, model_path=model_path, allowed=allowed)
+            rem = _rem_from_llm(
+                urn, llm, model_path=model_path, allowed=allowed, changes=changes
+            )
         except ValueError:
             _log_agent(
                 f"agent=deterministic fallback urn={urn} "

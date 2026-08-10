@@ -7,19 +7,20 @@ from pathlib import Path
 
 from cascade.agent import choose_and_rewrite
 from cascade.apply import run_apply
-from cascade.config import load_config, resolve_urn
+from cascade.config import changes_for_urn, load_config, resolve_urns
 from cascade.datahub_live import resolve_catalog
 from cascade.demo import DEFAULT_DIFF, DEFAULT_MODELS, DEFAULT_URN, run_demo
 from cascade.diff_parser import changed_paths, parse_changes_text
 from cascade.dotenv_load import load_dotenv
 from cascade.impact import build_impact_report
+from cascade.models import ImpactReport
 from cascade.policy import evaluate_policy
 
 
-def _resolve_impact_urn(args: argparse.Namespace, diff_text: str) -> str:
+def _resolve_impact_urns(args: argparse.Namespace, diff_text: str) -> list[str]:
     cfg = load_config(getattr(args, "config", None))
     paths = changed_paths(diff_text) if not diff_text.lstrip().startswith(("{", "[")) else []
-    return resolve_urn(paths, cfg, explicit=getattr(args, "urn", None) or None)
+    return resolve_urns(paths, cfg, explicit=getattr(args, "urn", None) or None)
 
 
 def _models_dir(args: argparse.Namespace, default: str | None = None) -> str | None:
@@ -31,42 +32,92 @@ def _models_dir(args: argparse.Namespace, default: str | None = None) -> str | N
     return default
 
 
+def _severity_rank(severity: str) -> int:
+    return {"low": 0, "medium": 1, "high": 2}.get(str(severity).lower(), 0)
+
+
 def cmd_impact(args: argparse.Namespace) -> None:
     diff_text = Path(args.diff).read_text()
-    changes = parse_changes_text(diff_text)
-    urn = _resolve_impact_urn(args, diff_text)
+    all_changes = parse_changes_text(diff_text)
+    cfg = load_config(getattr(args, "config", None))
+    urns = _resolve_impact_urns(args, diff_text)
     models_dir = _models_dir(args)
 
-    catalog = resolve_catalog(args.source, urn, args.fixture)
-    report = build_impact_report(
-        source_urn=urn,
-        changes=changes,
-        catalog=catalog,
-    )
+    merged_changes: list[dict] = []
+    merged_downstream: list[dict] = []
+    merged_ml: list[dict] = []
+    merged_remediations: list[dict] = []
+    seen_down: set[str] = set()
+    seen_rem: set[str] = set()
+    seen_change: set[str] = set()
+    severity = "low"
+    primary_urn = urns[0]
 
-    if getattr(args, "generate", False):
-        remediations = choose_and_rewrite(
+    for urn in urns:
+        changes = changes_for_urn(all_changes, urn, cfg)
+        if not changes and len(urns) > 1:
+            continue
+        if not changes:
+            changes = [{k: v for k, v in c.items() if k != "path"} for c in all_changes]
+        catalog = resolve_catalog(args.source, urn, args.fixture)
+        report = build_impact_report(
+            source_urn=urn,
             changes=changes,
             catalog=catalog,
-            models_dir=models_dir,
-            source_urn=urn,
         )
-        report.remediations = remediations
+        if _severity_rank(report.severity) > _severity_rank(severity):
+            severity = report.severity
+        for c in report.changes:
+            key = f"{c.get('type')}:{c.get('from')}:{c.get('to')}"
+            if key not in seen_change:
+                seen_change.add(key)
+                merged_changes.append(c)
+        for node in report.downstream:
+            urn_key = node["urn"]
+            if urn_key not in seen_down:
+                seen_down.add(urn_key)
+                merged_downstream.append(node)
+        for m in report.ml_impact:
+            merged_ml.append(m)
+
+        if getattr(args, "generate", False):
+            remediations = choose_and_rewrite(
+                changes=changes,
+                catalog=catalog,
+                models_dir=models_dir,
+                source_urn=urn,
+            )
+            for rem in remediations:
+                key = str(rem.get("path") or rem.get("urn"))
+                if key in seen_rem:
+                    continue
+                seen_rem.add(key)
+                merged_remediations.append(rem)
+
+    report = ImpactReport(
+        source_urn=primary_urn,
+        changes=merged_changes or [{k: v for k, v in c.items() if k != "path"} for c in all_changes],
+        downstream=merged_downstream,
+        ml_impact=merged_ml,
+        severity=severity,
+        remediations=merged_remediations if getattr(args, "generate", False) else [],
+    )
+    payload = report.to_dict()
+    payload["source_urns"] = urns
+
+    if getattr(args, "generate", False):
         out_dir = getattr(args, "out", None)
         if out_dir:
             out_path = Path(out_dir)
             out_path.mkdir(parents=True, exist_ok=True)
-            for rem in remediations:
+            for rem in merged_remediations:
                 rewritten = rem.get("rewritten_sql")
-                if rewritten:
-                    src = Path(rem["path"])
-                    dest = out_path / src.name
+                if rewritten and rem.get("path"):
+                    dest = out_path / Path(rem["path"]).name
                     dest.write_text(rewritten)
-            (out_path / "impact_report.json").write_text(
-                json.dumps(report.to_dict(), indent=2)
-            )
+            (out_path / "impact_report.json").write_text(json.dumps(payload, indent=2))
 
-    json.dump(report.to_dict(), sys.stdout, indent=2)
+    json.dump(payload, sys.stdout, indent=2)
     sys.stdout.write("\n")
 
 
