@@ -38,5 +38,7 @@ Trust **only** the provided `Changes` list and the given `Model SQL`. Invent not
 
 ## Strategy choice
 - `rewrite` — every needed fix is a direct, evidence-backed SQL edit.
-- `adapter_view` — a shim/alias layer is safer than editing this model (missing model file, ambiguous impact, partial knowledge).
+- When `Model SQL` is provided and a listed change can repair it directly, you **must** choose `rewrite` and return the complete edited SQL.
+- Preserve an existing downstream output name inside that rewrite with ``to AS from`` when needed. Do not choose `adapter_view` merely to preserve the old output contract.
+- `adapter_view` — use only when `Model SQL` is missing or the listed changes do not support a safe direct edit because impact is ambiguous or knowledge is partial.
 - `deprecate` — model cannot be safely repaired from `Changes` alone.
