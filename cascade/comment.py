@@ -61,7 +61,7 @@ def _agent_label(remediations: list[dict[str, Any]]) -> str:
 
 def blast_mermaid(report: dict[str, Any]) -> str | None:
     source = _short_name(str(report.get("source_urn") or "source"))
-    sid = _mid(source)
+    sid = f"s_{_mid(source)}"
     phrase = _change_phrase(report.get("changes") or [])
     downstream = report.get("downstream") or []
     if not downstream:
@@ -75,8 +75,8 @@ def blast_mermaid(report: dict[str, Any]) -> str | None:
         lines.append(f"  {sid} --> {nid}")
     extra = len(downstream) - len(shown)
     if extra > 0:
-        lines.append(f'  more["{extra} more downstream"]')
-        lines.append(f"  {sid} --> more")
+        lines.append(f'  xtra["{extra} more downstream"]')
+        lines.append(f"  {sid} --> xtra")
     return "\n".join(lines)
 
 

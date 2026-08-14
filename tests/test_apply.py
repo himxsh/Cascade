@@ -65,8 +65,24 @@ class TestComment(unittest.TestCase):
             ],
         })
         self.assertIsNotNone(graph)
+        self.assertIn("s_raw_orders", graph)
         self.assertIn("d0_stg_orders", graph)
         self.assertIn("d1_stg_orders", graph)
+
+    def test_blast_mermaid_overflow_id_distinct_from_source(self):
+        downstream = [
+            {"urn": f"urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.n{i},PROD)"}
+            for i in range(16)
+        ]
+        graph = blast_mermaid({
+            "source_urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.more,PROD)",
+            "changes": [{"type": "FIELD_REMOVED", "from": "x"}],
+            "downstream": downstream,
+        })
+        self.assertIsNotNone(graph)
+        self.assertIn("s_more", graph)
+        self.assertIn("xtra[", graph)
+        self.assertNotRegex(graph, r"(?m)^  more\[")
 
 
 class TestGitHubAct(unittest.TestCase):
