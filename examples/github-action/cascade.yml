@@ -42,7 +42,7 @@ jobs:
 
       - name: Install Cascade
         run: |
-          pip install "cascade-agent[writeback] @ git+https://github.com/himxsh/Cascade.git@PIN_ME"
+          pip install "cascade-agent[writeback] @ git+https://github.com/himxsh/Cascade.git@9849b5c6f763b8caaae65edd48cff0eeedaa3024"
 
       - name: Compute PR diff
         id: diff
