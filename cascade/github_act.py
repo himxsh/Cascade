@@ -312,19 +312,20 @@ def open_or_update_downstream_pr(
     marker = ""
     if source_urn:
         marker = f"\n<!-- cascade:source_urn={source_urn} -->\n"
-    pr_md_parts = [f"# {title}", "", body.strip(), marker]
+    pr_md_parts: list[str] = []
+    stripped = body.strip()
+    if stripped and not stripped.startswith("#"):
+        pr_md_parts.extend([f"# {title}", "", stripped])
+    elif stripped:
+        pr_md_parts.append(stripped)
+    else:
+        pr_md_parts.extend([f"# {title}", ""])
+    pr_md_parts.append(marker)
     if reviewers:
         pr_md_parts.append("## Suggested reviewers")
         pr_md_parts.append("")
         for r in reviewers:
             pr_md_parts.append(f"- @{r}")
-        pr_md_parts.append("")
-    if patch:
-        pr_md_parts.append("## Patch")
-        pr_md_parts.append("")
-        pr_md_parts.append("```diff")
-        pr_md_parts.append(patch.rstrip())
-        pr_md_parts.append("```")
         pr_md_parts.append("")
     pr_body = "\n".join(pr_md_parts)
 

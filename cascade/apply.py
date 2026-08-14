@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from cascade.audit import make_run_id, write_github_step_summary, write_run_audit
-from cascade.comment import build_pr_comment
+from cascade.comment import build_pr_comment, build_remediation_pr_body, build_remediation_title
 from cascade.datahub_write import mark_migrated, write_dataset_breaking, write_ml_retrain
 from cascade.github_act import (
     open_or_update_downstream_pr,
@@ -54,12 +54,12 @@ def run_apply(
     reviewers = reviewers_from_report(report)
     source_urn = report.get("source_urn", "")
 
-    # Draft comment first (no remediation URL yet) for the downstream PR body.
-    draft_comment = build_pr_comment(report)
+    title = build_remediation_title(report)
+    pr_body = build_remediation_pr_body(report)
     downstream_result = open_or_update_downstream_pr(
         files,
-        title="Cascade: remediate downstream schema break",
-        body=draft_comment,
+        title=title,
+        body=pr_body,
         out_dir=out,
         reviewers=reviewers,
         upstream_pr=pr_number,

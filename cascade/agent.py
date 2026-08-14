@@ -1,9 +1,8 @@
 """Agent: choose remediation strategy + rewrite downstream SQL.
 
-LLM is primary when LLM_API_KEY / OPENAI_API_KEY is set.
-Deterministic rewrite is used only when:
-  - no API key
-  - LLM transport/parse failure
+LLM is used only when CASCADE_MODE=llm (or --rewrite llm) and a key is set.
+Deterministic rewrite is the default. LLM also falls back when:
+  - transport/parse failure
   - schema-gate rejects LLM SQL
   - latency exceeds LLM_MAX_LATENCY_MS (or request hits LLM_TIMEOUT_SEC)
 """
@@ -20,13 +19,16 @@ from typing import Any
 from urllib.error import URLError, HTTPError
 from urllib.request import Request, urlopen
 
-from cascade.config import load_config, resolve_model_path
+from cascade.config import CascadeConfig, load_config, resolve_model_path, resolve_rewrite_mode
 from cascade.schema_gate import validate_rename_semantics, validate_sql
 from cascade.rewrite import rename_column
 
 _LLM_CHAT_URL_RE = re.compile(r"^(https?://.+)/chat/completions$")
-_DEFAULT_MODEL = "deepseek.v3.2"
-_DEFAULT_BASE_URL = "https://bedrock-mantle.us-east-1.api.aws/v1"
+_PROVIDER_BASE = {
+    "openai": "https://api.openai.com/v1",
+    "ollama": "http://127.0.0.1:11434/v1",
+}
+_BASE_URL_REQUIRED = frozenset({"azure-openai", "bedrock", "anthropic", "custom"})
 _DEFAULT_TIMEOUT_SEC = 15
 _DEFAULT_MAX_LATENCY_MS = 15_000
 _REWRITE_SKILL_PATH = Path(__file__).resolve().parent / "prompts" / "rewrite_skill.md"
@@ -51,6 +53,32 @@ def _llm_timeout_sec() -> float:
         except ValueError:
             pass
     return float(_DEFAULT_TIMEOUT_SEC)
+
+
+def _rewrite_provider(cfg: CascadeConfig) -> str:
+    env = os.environ.get("CASCADE_LLM_PROVIDER", "").strip().lower()
+    if env:
+        return env
+    return (cfg.rewrite_provider or "openai").strip().lower() or "openai"
+
+
+def _llm_model(cfg: CascadeConfig) -> str:
+    env = os.environ.get("LLM_MODEL", "").strip()
+    if env:
+        return env
+    return (cfg.rewrite_model or "").strip()
+
+
+def _llm_base_url(cfg: CascadeConfig) -> str | None:
+    explicit = os.environ.get("LLM_BASE_URL", "").strip().rstrip("/")
+    if explicit:
+        return explicit
+    provider = _rewrite_provider(cfg)
+    if provider in _PROVIDER_BASE:
+        return _PROVIDER_BASE[provider]
+    if provider in _BASE_URL_REQUIRED:
+        return None
+    return _PROVIDER_BASE["openai"]
 
 
 def _llm_max_latency_ms() -> int:
@@ -229,14 +257,22 @@ def _call_llm(
     changes: list[dict[str, Any]],
     downstream_info: list[dict[str, Any]],
     model_sql: str | None,
+    cfg: CascadeConfig | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """Returns (parsed_json_or_None, meta). Meta never includes secrets."""
+    cfg = cfg if cfg is not None else load_config()
     api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    base_url = os.environ.get("LLM_BASE_URL", _DEFAULT_BASE_URL).rstrip("/")
-    model = os.environ.get("LLM_MODEL", _DEFAULT_MODEL)
+    base_url = _llm_base_url(cfg)
+    model = _llm_model(cfg)
     meta: dict[str, Any] = {"model": model, "latency_ms": None, "ok": False, "error": None}
     if not api_key:
         meta["error"] = "no_api_key"
+        return None, meta
+    if not model:
+        meta["error"] = "no_model"
+        return None, meta
+    if not base_url:
+        meta["error"] = "no_base_url"
         return None, meta
 
     prompt = (
@@ -343,21 +379,35 @@ def _rem_from_llm(
     }
 
 
-# ponytail: OpenAI-compatible HTTP; default = Bedrock Mantle DeepSeek via LLM_BASE_URL + LLM_MODEL
+# ponytail: OpenAI-compatible HTTP; named providers set LLM_BASE_URL, no Mantle default
 def choose_and_rewrite(
     changes: list[dict[str, Any]],
     catalog: dict[str, Any],
     models_dir: str | Path | None = None,
     source_urn: str | None = None,
     urn_files: dict[str, str] | None = None,
+    rewrite_mode: str | None = None,
+    config: CascadeConfig | None = None,
 ) -> list[dict[str, Any]]:
-    """LLM-primary remediations when keyed; deterministic only as fallback."""
-    files = urn_files if urn_files is not None else load_config().urn_files
+    """Deterministic by default; LLM only when mode=llm and keyed."""
+    cfg = config if config is not None else load_config()
+    files = urn_files if urn_files is not None else cfg.urn_files
     demo = _demo_choose_and_rewrite(changes, catalog, models_dir, source_urn, files)
+    mode = resolve_rewrite_mode(rewrite_mode, config=cfg)
     api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        _log_agent("agent=deterministic reason=no_api_key")
+    if mode != "llm":
+        _log_agent("agent=deterministic reason=mode")
         return demo
+    if not api_key:
+        raise RuntimeError(
+            "cascade: CASCADE_MODE=llm requires LLM_API_KEY or OPENAI_API_KEY"
+        )
+    if not _llm_model(cfg):
+        raise RuntimeError("cascade: CASCADE_MODE=llm requires LLM_MODEL")
+    if _llm_base_url(cfg) is None:
+        raise RuntimeError(
+            f"cascade: provider {_rewrite_provider(cfg)!r} requires LLM_BASE_URL"
+        )
 
     demo_by_urn: dict[str, list[dict[str, Any]]] = {}
     for rem in demo:
@@ -374,7 +424,7 @@ def choose_and_rewrite(
         schema_fields = [f["name"] for f in ds.get("schema_fields", [])]
         downstream_info = [{"urn": urn, "schema_fields": schema_fields}]
 
-        llm, meta = _call_llm(changes, downstream_info, model_sql)
+        llm, meta = _call_llm(changes, downstream_info, model_sql, cfg)
         if llm is None:
             _log_agent(
                 f"agent=deterministic fallback urn={urn} "

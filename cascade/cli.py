@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from cascade import __version__
 from cascade.agent import choose_and_rewrite
 from cascade.apply import run_apply
 from cascade.config import changes_for_urn, load_config, resolve_urns
@@ -15,6 +16,7 @@ from cascade.dotenv_load import load_dotenv
 from cascade.impact import build_impact_report
 from cascade.models import ImpactReport
 from cascade.policy import evaluate_policy
+from cascade.setup_cmd import run_doctor, run_init
 
 
 def _resolve_impact_urns(args: argparse.Namespace, diff_text: str) -> list[str]:
@@ -86,6 +88,8 @@ def cmd_impact(args: argparse.Namespace) -> None:
                 catalog=catalog,
                 models_dir=models_dir,
                 source_urn=urn,
+                rewrite_mode=getattr(args, "rewrite", None),
+                config=cfg,
             )
             for rem in remediations:
                 key = str(rem.get("path") or rem.get("urn"))
@@ -127,6 +131,7 @@ def cmd_generate(args: argparse.Namespace) -> None:
     changes = report_data.get("changes", [])
     catalog = resolve_catalog(getattr(args, "source", "fixture"), source_urn or None, args.fixture)
     models_dir = _models_dir(args, "examples/models")
+    cfg = load_config(getattr(args, "config", None))
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -135,6 +140,8 @@ def cmd_generate(args: argparse.Namespace) -> None:
         catalog=catalog,
         models_dir=models_dir,
         source_urn=source_urn,
+        rewrite_mode=getattr(args, "rewrite", None),
+        config=cfg,
     )
     report_data["remediations"] = remediations
 
@@ -157,11 +164,14 @@ def cmd_apply(args: argparse.Namespace) -> None:
         changes = report_data.get("changes", [])
         catalog = resolve_catalog(getattr(args, "source", "fixture"), source_urn or None, args.fixture)
         models_dir = _models_dir(args, "examples/models")
+        cfg = load_config(getattr(args, "config", None))
         report_data["remediations"] = choose_and_rewrite(
             changes=changes,
             catalog=catalog,
             models_dir=models_dir,
             source_urn=source_urn,
+            rewrite_mode=getattr(args, "rewrite", None),
+            config=cfg,
         )
 
     summary = run_apply(
@@ -207,9 +217,22 @@ def cmd_demo(args: argparse.Namespace) -> None:
     sys.stdout.write("\n")
 
 
+def cmd_init(args: argparse.Namespace) -> None:
+    for line in run_init(Path(args.dir) if args.dir else Path.cwd(), force=args.force):
+        print(line)
+
+
+def cmd_doctor(args: argparse.Namespace) -> None:
+    lines, rc = run_doctor(Path(args.dir) if args.dir else Path.cwd())
+    print("\n".join(lines))
+    if rc:
+        raise SystemExit(rc)
+
+
 def main() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description="Cascade — schema change impact analyzer")
+    parser.add_argument("--version", action="version", version=f"cascade {__version__}")
     sub = parser.add_subparsers(dest="command")
     sub.required = True
 
@@ -233,6 +256,11 @@ def main() -> None:
     impact_p.add_argument("--generate", action="store_true", help="Run agent to produce remediations")
     impact_p.add_argument("--models-dir", help="Directory with downstream model SQL files")
     impact_p.add_argument("--out", help="Output directory for rewritten SQL files")
+    impact_p.add_argument(
+        "--rewrite",
+        choices=["deterministic", "llm"],
+        help="Rewrite engine (default: CASCADE_MODE or deterministic)",
+    )
     impact_p.set_defaults(func=cmd_impact)
 
     gen_p = sub.add_parser("generate", help="Generate remediations from an existing impact report")
@@ -246,6 +274,11 @@ def main() -> None:
         choices=["fixture", "live", "auto"],
         default="fixture",
         help="Catalog source for schema gate / rewrite (default fixture)",
+    )
+    gen_p.add_argument(
+        "--rewrite",
+        choices=["deterministic", "llm"],
+        help="Rewrite engine (default: CASCADE_MODE or deterministic)",
     )
     gen_p.set_defaults(func=cmd_generate)
 
@@ -268,6 +301,11 @@ def main() -> None:
         "--generate",
         action="store_true",
         help="(Re)run agent remediations before apply",
+    )
+    apply_p.add_argument(
+        "--rewrite",
+        choices=["deterministic", "llm"],
+        help="Rewrite engine when --generate (default: CASCADE_MODE or deterministic)",
     )
     apply_p.add_argument(
         "--mark-migrated",
@@ -302,6 +340,15 @@ def main() -> None:
         help="Exit non-zero when policy fails",
     )
     policy_p.set_defaults(func=cmd_policy)
+
+    init_p = sub.add_parser("init", help="Write .cascade/config.json, .env.example, and GitHub Action")
+    init_p.add_argument("--dir", help="Repo root (default: cwd)")
+    init_p.add_argument("--force", action="store_true", help="Overwrite existing files")
+    init_p.set_defaults(func=cmd_init)
+
+    doctor_p = sub.add_parser("doctor", help="Check Python, config, DataHub, and rewrite mode")
+    doctor_p.add_argument("--dir", help="Repo root (default: cwd)")
+    doctor_p.set_defaults(func=cmd_doctor)
 
     demo_p = sub.add_parser(
         "demo",

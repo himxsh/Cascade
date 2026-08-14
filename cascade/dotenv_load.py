@@ -25,15 +25,14 @@ def _parse_line(line: str) -> tuple[str, str] | None:
 def load_dotenv(path: str | Path | None = None) -> Path | None:
     """Load KEY=VALUE from .env into os.environ (skip keys already set).
 
-    Search order when path is None: cwd/.env, then repo-root/.env (parent of cascade/).
+    Search order when path is None: cwd/.env only (consumer repo). Never the
+    installed package location.
     """
     candidates: list[Path] = []
     if path is not None:
         candidates.append(Path(path))
     else:
         candidates.append(Path.cwd() / ".env")
-        repo_root = Path(__file__).resolve().parents[1]
-        candidates.append(repo_root / ".env")
 
     seen: set[Path] = set()
     for candidate in candidates:
