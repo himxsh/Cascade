@@ -7,12 +7,28 @@ from pathlib import Path
 from typing import Any
 
 
-def _default_fixture_path() -> Path:
-    return Path(__file__).resolve().parents[1] / "demo" / "fixtures" / "demo_graph.json"
+def _default_fixture_path() -> Path | None:
+    """Dev-tree fixture only. The installed wheel does not ship demo/fixtures."""
+    env = os.environ.get("CASCADE_FIXTURE_PATH", "").strip()
+    if env:
+        return Path(env)
+    cwd = Path.cwd() / "demo" / "fixtures" / "demo_graph.json"
+    if cwd.is_file():
+        return cwd
+    # Editable checkout: cascade/../demo/fixtures — missing after pip install from PyPI.
+    bundled = Path(__file__).resolve().parents[1] / "demo" / "fixtures" / "demo_graph.json"
+    if bundled.is_file():
+        return bundled
+    return None
 
 
 def load_catalog(fixture_path: str | Path | None = None) -> dict[str, Any]:
     path = fixture_path or os.environ.get("CASCADE_FIXTURE_PATH") or _default_fixture_path()
+    if path is None or not Path(path).is_file():
+        raise FileNotFoundError(
+            "cascade: fixture catalog not found. Pass --fixture or set "
+            "CASCADE_FIXTURE_PATH. The installed package does not ship demo fixtures."
+        )
     with open(path) as f:
         data = json.load(f)
 

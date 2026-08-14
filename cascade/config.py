@@ -15,6 +15,9 @@ class CascadeConfig:
     default_urn: str | None = None
     models_dir: str | None = None
     urn_files: dict[str, str] = field(default_factory=dict)  # urn → SQL path
+    rewrite_mode: str | None = None  # deterministic | llm
+    rewrite_provider: str | None = None
+    rewrite_model: str | None = None
 
 
 def _normalize_prefix(path: str) -> str:
@@ -59,11 +62,18 @@ def _parse(data: dict[str, Any]) -> CascadeConfig:
     if isinstance(raw_files, dict):
         for urn, fpath in raw_files.items():
             urn_files[str(urn)] = _normalize_prefix(str(fpath))
+    rewrite = data.get("rewrite") if isinstance(data.get("rewrite"), dict) else {}
+    mode = str(rewrite.get("mode") or "").strip().lower() or None
+    provider = str(rewrite.get("provider") or "").strip().lower() or None
+    model = str(rewrite.get("model") or "").strip() or None
     return CascadeConfig(
         mappings=mappings,
         default_urn=str(default_urn) if default_urn else None,
         models_dir=str(models_dir) if models_dir else None,
         urn_files=urn_files,
+        rewrite_mode=mode if mode in ("deterministic", "llm") else None,
+        rewrite_provider=provider,
+        rewrite_model=model,
     )
 
 
@@ -173,3 +183,16 @@ def changes_for_urn(
         if mapped == urn:
             out.append({k: v for k, v in change.items() if k != "path"})
     return out
+
+
+def resolve_rewrite_mode(cli: str | None = None) -> str:
+    """CLI flag → CASCADE_MODE → config rewrite.mode → deterministic."""
+    if cli in ("deterministic", "llm"):
+        return cli
+    env = os.environ.get("CASCADE_MODE", "").strip().lower()
+    if env in ("deterministic", "llm"):
+        return env
+    cfg = load_config()
+    if cfg.rewrite_mode in ("deterministic", "llm"):
+        return cfg.rewrite_mode
+    return "deterministic"
