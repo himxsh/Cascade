@@ -54,7 +54,7 @@ class TestLlmTransport(unittest.TestCase):
         }).encode()
         response.__enter__.return_value = response
 
-        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key", "LLM_MODEL": "test-model", "CASCADE_MODE": "llm"}, clear=False):
             with mock.patch("cascade.agent.urlopen", return_value=response) as urlopen:
                 parsed, meta = _call_llm([], [], None)
 
@@ -155,6 +155,7 @@ class TestDemoAgent(unittest.TestCase):
             catalog=self.catalog,
             models_dir=str(MODELS_DIR),
             source_urn=RAW_URN,
+            rewrite_mode="deterministic",
         )
         fct_rems = [r for r in remediations if FCT_URN in r.get("urn", "")]
         self.assertGreaterEqual(len(fct_rems), 1)
@@ -175,6 +176,7 @@ class TestDemoAgent(unittest.TestCase):
             catalog=self.catalog,
             models_dir=str(MODELS_DIR),
             source_urn=RAW_URN,
+            rewrite_mode="deterministic",
         )
         for rem in remediations:
             self.assertTrue(len(rem["rationale"]) > 0, f"empty rationale for {rem}")
@@ -189,6 +191,7 @@ class TestDemoAgent(unittest.TestCase):
             catalog=self.catalog,
             models_dir=str(MODELS_DIR),
             source_urn=RAW_URN,
+            rewrite_mode="deterministic",
         )
         strategies = {r["strategy"] for r in remediations}
         self.assertIn("adapter_view", strategies)
@@ -203,8 +206,42 @@ class TestDemoAgent(unittest.TestCase):
             catalog=self.catalog,
             models_dir=str(MODELS_DIR),
             source_urn=RAW_URN,
+            rewrite_mode="deterministic",
         )
         self.assertGreater(len(remediations), 0)
+        self.assertTrue(all(r.get("agent") == "deterministic" for r in remediations))
+
+    def test_llm_mode_without_key_raises(self):
+        changes = [
+            {"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id",
+             "detected_by": "heuristic"}
+        ]
+        env = {k: v for k, v in os.environ.items() if k not in ("LLM_API_KEY", "OPENAI_API_KEY")}
+        with mock.patch.dict(os.environ, env, clear=True):
+            with self.assertRaises(RuntimeError):
+                choose_and_rewrite(
+                    changes=changes,
+                    catalog=self.catalog,
+                    models_dir=str(MODELS_DIR),
+                    source_urn=RAW_URN,
+                    rewrite_mode="llm",
+                )
+
+    def test_deterministic_mode_skips_llm_when_keyed(self):
+        changes = [
+            {"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id",
+             "detected_by": "heuristic"}
+        ]
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key", "LLM_MODEL": "x"}, clear=False):
+            with mock.patch("cascade.agent._call_llm") as call:
+                remediations = choose_and_rewrite(
+                    changes=changes,
+                    catalog=self.catalog,
+                    models_dir=str(MODELS_DIR),
+                    source_urn=RAW_URN,
+                    rewrite_mode="deterministic",
+                )
+        call.assert_not_called()
         self.assertTrue(all(r.get("agent") == "deterministic" for r in remediations))
 
 
@@ -224,7 +261,7 @@ class TestLlmPrimary(unittest.TestCase):
             "rationale": "LLM: rename user_id to customer_id in fct_orders",
             "sql": llm_sql,
         }
-        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key", "LLM_MODEL": "test-model", "CASCADE_MODE": "llm"}, clear=False):
             with mock.patch("cascade.agent._call_llm", return_value=(fake, {
                 "model": "qwen.qwen3-coder-480b-a35b-v1:0", "latency_ms": 12, "ok": True, "error": None,
             })):
@@ -249,7 +286,7 @@ class TestLlmPrimary(unittest.TestCase):
             "rationale": "bad invent",
             "sql": "SELECT totally_invented_col FROM t",
         }
-        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key", "LLM_MODEL": "test-model", "CASCADE_MODE": "llm"}, clear=False):
             with mock.patch("cascade.agent._call_llm", return_value=(fake, {
                 "model": "qwen.qwen3-coder-480b-a35b-v1:0", "latency_ms": 5, "ok": True, "error": None,
             })):
@@ -268,7 +305,7 @@ class TestLlmPrimary(unittest.TestCase):
             {"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id",
              "detected_by": "heuristic"}
         ]
-        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key"}, clear=False):
+        with mock.patch.dict(os.environ, {"LLM_API_KEY": "test-key", "LLM_MODEL": "test-model", "CASCADE_MODE": "llm"}, clear=False):
             with mock.patch("cascade.agent._call_llm", return_value=(None, {
                 "model": "qwen.qwen3-coder-480b-a35b-v1:0", "latency_ms": 30000, "ok": False, "error": "TimeoutError",
             })):
@@ -288,7 +325,12 @@ class TestLlmPrimary(unittest.TestCase):
         ]
         with mock.patch.dict(
             os.environ,
-            {"LLM_API_KEY": "test-key", "LLM_MAX_LATENCY_MS": "1000"},
+            {
+                "LLM_API_KEY": "test-key",
+                "LLM_MODEL": "test-model",
+                "CASCADE_MODE": "llm",
+                "LLM_MAX_LATENCY_MS": "1000",
+            },
             clear=False,
         ):
             with mock.patch("cascade.agent._call_llm", return_value=(None, {

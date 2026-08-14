@@ -3,7 +3,7 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cascade"
+name = "cascade-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
 description = "An agent that turns a breaking schema PR into a coordinated migration"
@@ -13,7 +13,7 @@ license = { text = "Apache-2.0" }
 packages = ["cascade"]
 
 [tool.setuptools.package-data]
-cascade = ["prompts/*.md"]
+cascade = ["prompts/*.md", "templates/*"]
 
 [project.scripts]
 cascade = "cascade.cli:main"

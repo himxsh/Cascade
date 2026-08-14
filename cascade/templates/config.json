@@ -1,0 +1,16 @@
+{
+  "models_dir": "models",
+  "default_urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,YOUR_DB.public.YOUR_TABLE,PROD)",
+  "mappings": [
+    {
+      "path": "models/",
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,YOUR_DB.public.YOUR_TABLE,PROD)"
+    }
+  ],
+  "urn_files": {},
+  "rewrite": {
+    "mode": "deterministic",
+    "provider": "openai",
+    "model": ""
+  }
+}

@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from cascade.apply import remediations_to_files, run_apply
-from cascade.comment import build_pr_comment
+from cascade.comment import build_pr_comment, build_remediation_pr_body
 from cascade.datahub_write import (
     TAG_BREAKING_PENDING,
     TAG_MIGRATED,
@@ -35,14 +35,25 @@ class TestComment(unittest.TestCase):
         report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
         md = build_pr_comment(report)
         self.assertIn("Cascade impact report", md)
-        self.assertIn("Blast radius", md)
-        self.assertIn("analytics.fct_orders", md)
-        self.assertIn("Agent remediations", md)
-        self.assertIn("rewrite", md)
-        self.assertIn("rewriting to customer_id", md)
-        self.assertIn("retrain-suggested", md)
+        self.assertIn("fct_orders", md)
+        self.assertIn("```mermaid", md)
+        self.assertIn("user_id to customer_id", md)
+        self.assertIn("retrain suggested", md)
         with_url = build_pr_comment(report, remediation_pr_url="https://github.com/o/r/pull/9")
         self.assertIn("**Remediation PR:** https://github.com/o/r/pull/9", with_url)
+
+    def test_remediation_pr_has_mermaid_not_diff(self):
+        report = json.loads(GOLDEN_REPORT.read_text())
+        report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
+        report["remediations"][1]["agent"] = "deterministic"
+        md = build_remediation_pr_body(report)
+        self.assertIn("```mermaid", md)
+        self.assertIn("What could break", md)
+        self.assertIn("How Cascade fixed it", md)
+        self.assertIn("fct_orders", md)
+        self.assertIn("deterministic", md)
+        self.assertNotIn("```diff", md)
+        self.assertIn("**Source:**", md)
 
 
 class TestGitHubAct(unittest.TestCase):
@@ -258,6 +269,9 @@ class TestApply(unittest.TestCase):
             patch = Path(tmp, "downstream_pr.diff").read_text()
             self.assertIn("-    user_id,", patch)
             self.assertIn("+    customer_id,", patch)
+            body = Path(tmp, "downstream_pr.md").read_text()
+            self.assertIn("```mermaid", body)
+            self.assertNotIn("```diff", body)
 
     def test_remediations_to_files(self):
         files = remediations_to_files([
