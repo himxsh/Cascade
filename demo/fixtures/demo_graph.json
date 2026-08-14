@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "description": "Demo lineage graph for Cascade — Phase 0 seed. Matches docs/spec.md §9.",
+  "description": "Demo lineage graph for Cascade.",
   "datasets": [
     {
       "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",

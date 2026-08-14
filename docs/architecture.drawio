@@ -6,7 +6,7 @@
         <mxCell id="1" parent="0" />
 
         <!-- Title -->
-        <mxCell id="title" value="Cascade — Architecture (DataHub Agent Hackathon)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=18;" vertex="1" parent="1">
+        <mxCell id="title" value="Cascade — Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontStyle=1;fontSize=18;" vertex="1" parent="1">
           <mxGeometry x="40" y="20" width="640" height="30" as="geometry" />
         </mxCell>
         <mxCell id="subtitle" value="Breaking schema PR → DataHub context → LLM reasons per node → rewrites downstream code → acts in GitHub → writes back (dataset + ML)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#666666;" vertex="1" parent="1">
@@ -71,7 +71,7 @@
         </mxCell>
 
         <!-- Swimlane: Outputs -->
-        <mxCell id="lane-out" value="Outputs (what judges see)" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;startSize=28;" vertex="1" parent="1">
+        <mxCell id="lane-out" value="Outputs" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;startSize=28;" vertex="1" parent="1">
           <mxGeometry x="40" y="620" width="1180" height="175" as="geometry" />
         </mxCell>
         <mxCell id="out-comment" value="Source PR comment&#xa;blast radius + rationale" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane-out">
@@ -157,7 +157,7 @@
         </mxCell>
 
         <!-- Legend -->
-        <mxCell id="legend" value="Legend: solid = required MVP path · dashed = CLI/local, fallback, or write-back lifecycle · ★ yellow-bold = LLM reasoning (the agent) · orange = tools · purple = DataHub · green = artifacts judges see" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+        <mxCell id="legend" value="Legend: solid = required path · dashed = CLI/local, fallback, or write-back lifecycle · ★ yellow-bold = LLM reasoning (the agent) · orange = tools · purple = DataHub · green = output artifacts" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
           <mxGeometry x="40" y="810" width="1180" height="30" as="geometry" />
         </mxCell>
       </root>

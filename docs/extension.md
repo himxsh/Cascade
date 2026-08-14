@@ -134,7 +134,7 @@ Do in order. Later items assume earlier ones exist.
 
 | Extra | Value | Skip if… |
 |-------|--------|----------|
-| PyPI release + versioning | One-line install | Git install is enough for hackathon |
+| PyPI release + versioning | One-line install | Git install is enough for now |
 | Reusable Action marketplace entry | Discoverability | Template YAML is enough |
 | Column-level lineage | Better blast radius | GMS doesn’t have it |
 | MCP / Agent Context Kit | Less custom GraphQL | Stdlib client is fine |

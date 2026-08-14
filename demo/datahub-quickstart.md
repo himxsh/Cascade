@@ -6,7 +6,7 @@ laptop demos and offline seeding practice.
 
 ---
 
-## Option A — DataHub Cloud / remote GMS (Actions + judges)
+## Option A — DataHub Cloud / remote GMS (Actions + HTTPS)
 
 1. Provision [DataHub Cloud](https://www.acryldata.io/) or a self-hosted GMS with HTTPS.
 2. Create a token with **read** + **aspect ingest** (write) permissions.

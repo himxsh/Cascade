@@ -16,7 +16,7 @@ Both produce the same ImpactReport via `cascade impact --diff`.
 Static output of the generate path for the demo rename (`user_id` → `customer_id`):
 
 - `fct_orders.sql` — rewritten mergeable SQL
-- `headline_pr.diff` — the PR-shaped unified diff judges can read without running the agent
+- `headline_pr.diff` — the PR-shaped unified diff you can read without running the agent
 
 Regenerate (must match `tests/golden/raw_orders_rename/`):
 
