@@ -19,7 +19,7 @@ from typing import Any
 from urllib.error import URLError, HTTPError
 from urllib.request import Request, urlopen
 
-from cascade.config import load_config, resolve_model_path, resolve_rewrite_mode
+from cascade.config import CascadeConfig, load_config, resolve_model_path, resolve_rewrite_mode
 from cascade.schema_gate import validate_rename_semantics, validate_sql
 from cascade.rewrite import rename_column
 
@@ -55,27 +55,25 @@ def _llm_timeout_sec() -> float:
     return float(_DEFAULT_TIMEOUT_SEC)
 
 
-def _rewrite_provider() -> str:
+def _rewrite_provider(cfg: CascadeConfig) -> str:
     env = os.environ.get("CASCADE_LLM_PROVIDER", "").strip().lower()
     if env:
         return env
-    cfg = load_config()
     return (cfg.rewrite_provider or "openai").strip().lower() or "openai"
 
 
-def _llm_model() -> str:
+def _llm_model(cfg: CascadeConfig) -> str:
     env = os.environ.get("LLM_MODEL", "").strip()
     if env:
         return env
-    cfg = load_config()
     return (cfg.rewrite_model or "").strip()
 
 
-def _llm_base_url() -> str | None:
+def _llm_base_url(cfg: CascadeConfig) -> str | None:
     explicit = os.environ.get("LLM_BASE_URL", "").strip().rstrip("/")
     if explicit:
         return explicit
-    provider = _rewrite_provider()
+    provider = _rewrite_provider(cfg)
     if provider in _PROVIDER_BASE:
         return _PROVIDER_BASE[provider]
     if provider in _BASE_URL_REQUIRED:
@@ -259,11 +257,13 @@ def _call_llm(
     changes: list[dict[str, Any]],
     downstream_info: list[dict[str, Any]],
     model_sql: str | None,
+    cfg: CascadeConfig | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """Returns (parsed_json_or_None, meta). Meta never includes secrets."""
+    cfg = cfg if cfg is not None else load_config()
     api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    base_url = _llm_base_url()
-    model = _llm_model()
+    base_url = _llm_base_url(cfg)
+    model = _llm_model(cfg)
     meta: dict[str, Any] = {"model": model, "latency_ms": None, "ok": False, "error": None}
     if not api_key:
         meta["error"] = "no_api_key"
@@ -387,11 +387,13 @@ def choose_and_rewrite(
     source_urn: str | None = None,
     urn_files: dict[str, str] | None = None,
     rewrite_mode: str | None = None,
+    config: CascadeConfig | None = None,
 ) -> list[dict[str, Any]]:
     """Deterministic by default; LLM only when mode=llm and keyed."""
-    files = urn_files if urn_files is not None else load_config().urn_files
+    cfg = config if config is not None else load_config()
+    files = urn_files if urn_files is not None else cfg.urn_files
     demo = _demo_choose_and_rewrite(changes, catalog, models_dir, source_urn, files)
-    mode = resolve_rewrite_mode(rewrite_mode)
+    mode = resolve_rewrite_mode(rewrite_mode, config=cfg)
     api_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if mode != "llm":
         _log_agent("agent=deterministic reason=mode")
@@ -400,11 +402,11 @@ def choose_and_rewrite(
         raise RuntimeError(
             "cascade: CASCADE_MODE=llm requires LLM_API_KEY or OPENAI_API_KEY"
         )
-    if not _llm_model():
+    if not _llm_model(cfg):
         raise RuntimeError("cascade: CASCADE_MODE=llm requires LLM_MODEL")
-    if _llm_base_url() is None:
+    if _llm_base_url(cfg) is None:
         raise RuntimeError(
-            f"cascade: provider {_rewrite_provider()!r} requires LLM_BASE_URL"
+            f"cascade: provider {_rewrite_provider(cfg)!r} requires LLM_BASE_URL"
         )
 
     demo_by_urn: dict[str, list[dict[str, Any]]] = {}
@@ -422,7 +424,7 @@ def choose_and_rewrite(
         schema_fields = [f["name"] for f in ds.get("schema_fields", [])]
         downstream_info = [{"urn": urn, "schema_fields": schema_fields}]
 
-        llm, meta = _call_llm(changes, downstream_info, model_sql)
+        llm, meta = _call_llm(changes, downstream_info, model_sql, cfg)
         if llm is None:
             _log_agent(
                 f"agent=deterministic fallback urn={urn} "

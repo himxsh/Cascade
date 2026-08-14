@@ -68,11 +68,9 @@ def blast_mermaid(report: dict[str, Any]) -> str | None:
         return None
     shown = downstream[:_MAX_GRAPH_NODES]
     lines = ["flowchart LR", f'  {sid}["{source}: {phrase}"]']
-    for node in shown:
+    for i, node in enumerate(shown):
         name = _short_name(str(node.get("urn") or "downstream"))
-        nid = _mid(name)
-        if nid == sid:
-            nid = nid + "_d"
+        nid = f"d{i}_{_mid(name)}"
         lines.append(f'  {nid}["{name}"]')
         lines.append(f"  {sid} --> {nid}")
     extra = len(downstream) - len(shown)

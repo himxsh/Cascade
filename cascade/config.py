@@ -185,14 +185,17 @@ def changes_for_urn(
     return out
 
 
-def resolve_rewrite_mode(cli: str | None = None) -> str:
+def resolve_rewrite_mode(
+    cli: str | None = None,
+    config: CascadeConfig | None = None,
+) -> str:
     """CLI flag → CASCADE_MODE → config rewrite.mode → deterministic."""
     if cli in ("deterministic", "llm"):
         return cli
     env = os.environ.get("CASCADE_MODE", "").strip().lower()
     if env in ("deterministic", "llm"):
         return env
-    cfg = load_config()
+    cfg = config if config is not None else load_config()
     if cfg.rewrite_mode in ("deterministic", "llm"):
         return cfg.rewrite_mode
     return "deterministic"
