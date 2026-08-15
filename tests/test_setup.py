@@ -39,6 +39,24 @@ class TestRewriteMode(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CASCADE_MODE": "llm"}, clear=False):
             self.assertEqual(resolve_rewrite_mode("deterministic"), "deterministic")
 
+    def test_explicit_config_path_used_for_rewrite_mode(self):
+        env = {k: v for k, v in os.environ.items() if k != "CASCADE_MODE"}
+        with tempfile.TemporaryDirectory() as td:
+            cwd_cfg = Path(td) / ".cascade"
+            cwd_cfg.mkdir()
+            (cwd_cfg / "config.json").write_text(json.dumps({"rewrite": {"mode": "deterministic"}}))
+            other = Path(td) / "other.json"
+            other.write_text(json.dumps({"rewrite": {"mode": "llm", "provider": "openai", "model": "gpt-4o"}}))
+            loaded = load_config(other)
+            with mock.patch.dict(os.environ, env, clear=True):
+                old = Path.cwd()
+                os.chdir(td)
+                try:
+                    self.assertEqual(resolve_rewrite_mode(None), "deterministic")
+                    self.assertEqual(resolve_rewrite_mode(None, config=loaded), "llm")
+                finally:
+                    os.chdir(old)
+
     def test_load_rewrite_block(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "c.json"

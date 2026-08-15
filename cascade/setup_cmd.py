@@ -87,7 +87,7 @@ def run_doctor(root: Path | None = None) -> tuple[list[str], int]:
         lines.append(f"fail GMS unreachable {gms}")
         rc = 1
 
-    mode = resolve_rewrite_mode()
+    mode = resolve_rewrite_mode(config=cfg)
     lines.append(f"ok   rewrite mode {mode}")
     if mode == "llm":
         key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")

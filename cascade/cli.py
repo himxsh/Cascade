@@ -89,6 +89,7 @@ def cmd_impact(args: argparse.Namespace) -> None:
                 models_dir=models_dir,
                 source_urn=urn,
                 rewrite_mode=getattr(args, "rewrite", None),
+                config=cfg,
             )
             for rem in remediations:
                 key = str(rem.get("path") or rem.get("urn"))
@@ -130,6 +131,7 @@ def cmd_generate(args: argparse.Namespace) -> None:
     changes = report_data.get("changes", [])
     catalog = resolve_catalog(getattr(args, "source", "fixture"), source_urn or None, args.fixture)
     models_dir = _models_dir(args, "examples/models")
+    cfg = load_config(getattr(args, "config", None))
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -139,6 +141,7 @@ def cmd_generate(args: argparse.Namespace) -> None:
         models_dir=models_dir,
         source_urn=source_urn,
         rewrite_mode=getattr(args, "rewrite", None),
+        config=cfg,
     )
     report_data["remediations"] = remediations
 
@@ -161,12 +164,14 @@ def cmd_apply(args: argparse.Namespace) -> None:
         changes = report_data.get("changes", [])
         catalog = resolve_catalog(getattr(args, "source", "fixture"), source_urn or None, args.fixture)
         models_dir = _models_dir(args, "examples/models")
+        cfg = load_config(getattr(args, "config", None))
         report_data["remediations"] = choose_and_rewrite(
             changes=changes,
             catalog=catalog,
             models_dir=models_dir,
             source_urn=source_urn,
             rewrite_mode=getattr(args, "rewrite", None),
+            config=cfg,
         )
 
     summary = run_apply(

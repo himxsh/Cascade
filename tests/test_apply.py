@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from cascade.apply import remediations_to_files, run_apply
-from cascade.comment import build_pr_comment, build_remediation_pr_body
+from cascade.comment import blast_mermaid, build_pr_comment, build_remediation_pr_body
 from cascade.datahub_write import (
     TAG_BREAKING_PENDING,
     TAG_MIGRATED,
@@ -54,6 +54,35 @@ class TestComment(unittest.TestCase):
         self.assertIn("deterministic", md)
         self.assertNotIn("```diff", md)
         self.assertIn("**Source:**", md)
+
+    def test_blast_mermaid_unique_ids_for_same_short_name(self):
+        graph = blast_mermaid({
+            "source_urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.raw_orders,PROD)",
+            "changes": [{"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id"}],
+            "downstream": [
+                {"urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.stg_orders,PROD)"},
+                {"urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,other.public.stg_orders,PROD)"},
+            ],
+        })
+        self.assertIsNotNone(graph)
+        self.assertIn("s_raw_orders", graph)
+        self.assertIn("d0_stg_orders", graph)
+        self.assertIn("d1_stg_orders", graph)
+
+    def test_blast_mermaid_overflow_id_distinct_from_source(self):
+        downstream = [
+            {"urn": f"urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.n{i},PROD)"}
+            for i in range(16)
+        ]
+        graph = blast_mermaid({
+            "source_urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.more,PROD)",
+            "changes": [{"type": "FIELD_REMOVED", "from": "x"}],
+            "downstream": downstream,
+        })
+        self.assertIsNotNone(graph)
+        self.assertIn("s_more", graph)
+        self.assertIn("xtra[", graph)
+        self.assertNotRegex(graph, r"(?m)^  more\[")
 
 
 class TestGitHubAct(unittest.TestCase):
