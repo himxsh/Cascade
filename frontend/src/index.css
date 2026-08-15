@@ -1,56 +1,259 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
-  --color-ink: #0c0e12;
-  --color-panel: #12151a;
-  --color-raised: #181b22;
-  --color-line: #2a2f3a;
-  --color-muted: #8b929e;
-  --color-fg: #e8eaed;
-  --color-critical: #e85d4c;
-  --color-high: #e89a3c;
-  --color-medium: #c9a227;
-  --color-low: #5b8c5a;
-  --color-accent: #7a9bb8;
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Azeret Mono", ui-monospace, monospace;
+
+  --color-void: #050506;
+  --color-ink: #0a0a0b;
+  --color-panel: #141210;
+  --color-frost: #e4e8f0;
+  --color-mute: #b7bec9;
+  --color-line: #2c2826;
+  --color-ember: #fc3010;
+  --color-ember-ink: #140804;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-move: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --z-sticky: 20;
+  --z-modal: 40;
+  --z-toast: 50;
+  --z-tooltip: 60;
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   html,
   body,
   #root {
-    height: 100%;
+    min-height: 100%;
   }
 
   body {
     margin: 0;
-    background: var(--color-ink);
-    color: var(--color-fg);
+    background: var(--color-void);
+    color: var(--color-frost);
     font-family: var(--font-sans);
+    font-size: 1.0625rem;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   * {
     box-sizing: border-box;
+    scrollbar-width: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+    background: color-mix(in srgb, var(--color-ember) 40%, transparent);
+    color: var(--color-frost);
   }
 
   :focus-visible {
-    outline: 1px solid var(--color-accent);
-    outline-offset: 2px;
+    outline: 2px solid var(--color-ember);
+    outline-offset: 3px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .skip-link {
+    position: absolute;
+    left: 1rem;
+    top: -4rem;
+    z-index: var(--z-tooltip);
+    border-radius: 999px;
+    background: var(--color-ember);
+    color: var(--color-ember-ink);
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .skip-link:focus {
+    top: 1rem;
+  }
+
+  .gh {
+    overflow: hidden;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background: #0d1117;
+    color: #e6edf3;
+    font-family:
+      -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica,
+      Arial, sans-serif;
+    text-align: left;
+  }
+
+  .gh-code {
+    padding: 0.1em 0.4em;
+    border-radius: 6px;
+    background: rgba(110, 118, 129, 0.4);
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+      'Liberation Mono', monospace;
+    font-size: 12px;
+  }
+
+  .gh-mono {
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+      'Liberation Mono', monospace;
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.03em;
+    line-height: 1.12;
+  }
+
+  .nav-island {
+    border: 1px solid color-mix(in srgb, var(--color-frost) 12%, transparent);
+    background: var(--color-ink);
+    border-radius: 999px;
+  }
+
+  .slab {
+    border: 1px solid color-mix(in srgb, var(--color-frost) 12%, transparent);
+    background: var(--color-panel);
+    border-radius: 12px;
+  }
+
+  .hairline {
+    background: color-mix(in srgb, var(--color-frost) 12%, transparent);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    border-radius: 999px;
+    padding: 0.6rem 1.15rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    transition:
+      transform 160ms var(--ease-out),
+      background-color 160ms var(--ease-out),
+      color 160ms var(--ease-out),
+      border-color 160ms var(--ease-out);
+  }
+
+  .btn:active {
+    transform: scale(0.97);
+  }
+
+  .btn-ember {
+    background: var(--color-ember);
+    color: #140804;
+  }
+
+  .btn-ember:hover {
+    background: color-mix(in srgb, var(--color-ember) 88%, white);
+  }
+
+  .btn-ghost {
+    border: 1px solid color-mix(in srgb, var(--color-frost) 22%, transparent);
+    background: transparent;
+    color: var(--color-frost);
+  }
+
+  .btn-ghost:hover {
+    border-color: color-mix(in srgb, var(--color-frost) 40%, transparent);
+  }
+
+  .cmd {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-copy {
+      animation: rise-in 800ms var(--ease-out);
+    }
+
+    .hero-slab {
+      animation: rise-in 800ms var(--ease-out) 80ms;
+    }
+
+    @supports (animation-timeline: view()) {
+      .rise {
+        animation: rise-in 700ms var(--ease-out);
+        animation-timeline: view();
+        animation-range: entry 0% entry 42%;
+      }
+    }
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0.35;
+    filter: blur(5px);
+    transform: translateY(14px);
+  }
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.mark-stroke {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mark-stroke {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: draw 1100ms var(--ease-out) forwards;
+  }
+
+  .mark-stroke.inner {
+    animation-delay: 180ms;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  html {
+    scroll-behavior: auto;
+  }
+
+  .mark-stroke {
+    stroke-dashoffset: 0;
   }
 }

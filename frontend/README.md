@@ -1,14 +1,10 @@
-# Cascade frontend
+# Cascade site
 
-Vite + React + TypeScript + Tailwind migration console.
+Vite + React + TypeScript + Tailwind. Marketing and docs for the CLI / GitHub Action.
 
 ```bash
-# From repo root — API must be running on :8000
-uvicorn api.server:app --reload --port 8000
-
-# Then:
 npm install
 npm run dev
 ```
 
-Calls `/api/*` only (proxied to FastAPI). Fixture path is the default; no secrets in the client.
+Open http://localhost:5173. The old paste-diff playground is gone on purpose.

@@ -20,14 +20,48 @@ load_dotenv()
 # Built UI lives next to the function so Vercel includes it in the bundle.
 _STATIC = Path(__file__).resolve().parent / "static"
 
-# Inline so the tab icon works even if api/static/*.svg is dropped from the bundle.
+_STATIC_ROOT = _STATIC.resolve()
+
+# Fallback if the built PNG did not land in the function bundle.
 _FAVICON_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">'
-    '<rect width="32" height="32" fill="#0c0e12"/>'
-    '<path d="M6 22 L16 6 L26 22" stroke="#c4c9d4" stroke-width="2" fill="none"/>'
-    '<path d="M10 22 L16 12 L22 22" stroke="#e85d4c" stroke-width="1.5" fill="none"/>'
+    '<rect width="32" height="32" fill="#050506"/>'
+    '<path d="M6 24 L16 6 L26 24" stroke="#e4e8f0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+    '<path d="M11 24 L16 14 L21 24" stroke="#fc3010" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
     "</svg>"
 )
+
+
+def _static_file(relative: str) -> Path | None:
+    target = (_STATIC / relative).resolve()
+    if str(target).startswith(str(_STATIC_ROOT)) and target.is_file():
+        return target
+    return None
+
+
+def _index_html() -> FileResponse:
+    index = _STATIC / "index.html"
+    if not index.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="UI bundle missing (api/static). Rebuild with scripts/vercel_build.py.",
+        )
+    return FileResponse(index)
+
+
+def _favicon_response() -> FileResponse | Response:
+    png = _static_file("favicon.png") or _static_file("logo.png")
+    if png is not None:
+        return FileResponse(
+            png,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    return Response(
+        content=_FAVICON_SVG,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 app = FastAPI(title="Cascade UI API", version="0.1.0")
 app.add_middleware(
@@ -81,35 +115,36 @@ def api_run(body: RunRequest) -> dict[str, Any]:
 
 @app.get("/")
 def spa_index() -> FileResponse:
-    index = _STATIC / "index.html"
-    if not index.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="UI bundle missing (api/static). Rebuild with scripts/vercel_build.py.",
-        )
-    return FileResponse(index)
+    return _index_html()
 
 
 @app.api_route("/favicon.svg", methods=["GET", "HEAD"])
-def spa_favicon() -> Response:
-    return Response(
-        content=_FAVICON_SVG,
-        media_type="image/svg+xml",
-        headers={"Cache-Control": "public, max-age=86400"},
-    )
+def spa_favicon_svg() -> FileResponse | Response:
+    svg = _static_file("favicon.svg")
+    if svg is not None:
+        return FileResponse(svg, media_type="image/svg+xml")
+    return _favicon_response()
 
 
 @app.api_route("/favicon.ico", methods=["GET", "HEAD"])
-def spa_favicon_ico() -> Response:
-    # Browsers often request /favicon.ico; serve the same mark as SVG.
-    return spa_favicon()
+def spa_favicon_ico() -> FileResponse | Response:
+    return _favicon_response()
 
 
 @app.get("/assets/{asset_path:path}")
 def spa_asset(asset_path: str) -> FileResponse:
     # ponytail: path traversal guard; assets are hashed build outputs only
-    root = (_STATIC / "assets").resolve()
-    target = (root / asset_path).resolve()
-    if not str(target).startswith(str(root)) or not target.is_file():
+    target = _static_file(f"assets/{asset_path}")
+    if target is None:
         raise HTTPException(status_code=404, detail="asset not found")
     return FileResponse(target)
+
+
+@app.get("/{full_path:path}")
+def spa_fallback(full_path: str) -> FileResponse:
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="not found")
+    existing = _static_file(full_path)
+    if existing is not None:
+        return FileResponse(existing)
+    return _index_html()
