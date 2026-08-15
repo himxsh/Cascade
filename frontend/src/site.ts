@@ -1,3 +1,5 @@
+import Lenis from 'lenis'
+
 export const GITHUB = 'https://github.com/himxsh/Cascade'
 export const ACTION_FILE =
   'https://github.com/himxsh/Cascade/blob/main/examples/github-action/cascade.yml'
@@ -50,6 +52,15 @@ export function pathOf(): string {
   return window.location.pathname.replace(/\/+$/, '') || '/'
 }
 
+const lenis = new Lenis({
+  autoRaf: true,
+  anchors: true,
+  allowNestedScroll: true,
+  stopInertiaOnNavigate: true,
+})
+
+if (import.meta.hot) import.meta.hot.dispose(() => lenis.destroy())
+
 export function go(href: string): void {
   const url = new URL(href, window.location.origin)
   const next = url.pathname.replace(/\/+$/, '') || '/'
@@ -60,9 +71,6 @@ export function go(href: string): void {
   } else if (hash) {
     history.pushState(null, '', next + hash)
   }
-  if (hash) {
-    document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' })
-  } else {
-    window.scrollTo({ top: 0, behavior: 'auto' })
-  }
+  if (hash) lenis.scrollTo(hash)
+  else lenis.scrollTo(0, { immediate: true })
 }

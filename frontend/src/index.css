@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "lenis/dist/lenis.css";
 
 @theme {
   --font-display: "Instrument Serif", ui-serif, Georgia, serif;
@@ -24,10 +25,6 @@
 }
 
 @layer base {
-  html {
-    scroll-behavior: smooth;
-  }
-
   html,
   body,
   #root {
@@ -277,10 +274,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
   .mark-stroke {
     stroke-dashoffset: 0;
   }
