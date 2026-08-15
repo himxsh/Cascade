@@ -20,3 +20,12 @@ video/
 docs/
 .freebuff/
 
+# Local teaching workspace (not part of the product)
+MISSION.md
+RESOURCES.md
+NOTES.md
+/lessons/
+/learning-records/
+/reference/
+/assets/
+

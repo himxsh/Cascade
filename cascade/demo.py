@@ -17,7 +17,6 @@ _ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DIFF = str(_ROOT / "examples" / "diffs" / "raw_orders_rename_user_id.json")
 DEFAULT_MODELS = str(_ROOT / "examples" / "models")
 
-
 def run_demo(
     *,
     out_dir: str | Path = "artifacts/demo",
