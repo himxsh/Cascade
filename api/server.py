@@ -118,16 +118,16 @@ def spa_index() -> FileResponse:
     return _index_html()
 
 
-@app.api_route("/favicon.svg", methods=["GET", "HEAD"])
-def spa_favicon_svg() -> FileResponse | Response:
+@app.api_route("/favicon.svg", methods=["GET", "HEAD"], response_model=None)
+def spa_favicon_svg() -> Response:
     svg = _static_file("favicon.svg")
     if svg is not None:
         return FileResponse(svg, media_type="image/svg+xml")
     return _favicon_response()
 
 
-@app.api_route("/favicon.ico", methods=["GET", "HEAD"])
-def spa_favicon_ico() -> FileResponse | Response:
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"], response_model=None)
+def spa_favicon_ico() -> Response:
     return _favicon_response()
 
 
