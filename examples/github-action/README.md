@@ -8,4 +8,4 @@ Requires:
 - Secret `DATAHUB_GMS_URL` (HTTPS GMS; fail closed — no fixture fallback)
 - Optional: `DATAHUB_TOKEN`, `LLM_API_KEY`, `CASCADE_WRITEBACK`
 
-Pin Cascade to a commit/tag in the install step. See [cascade-shop](https://github.com/himxsh/cascade-shop) for a full reference repo.
+Pin Cascade to a commit/tag in the install step.

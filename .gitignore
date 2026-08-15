@@ -16,4 +16,7 @@ artifacts/
 .vercel
 /public/
 api/static/
+video/
+docs/
+.freebuff/
 

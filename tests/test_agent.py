@@ -92,11 +92,11 @@ class TestSchemaGate(unittest.TestCase):
         validate_sql(sql, {"customer_id"})
 
     def test_ignores_three_part_table_name(self):
-        sql = "SELECT customer_id FROM cascade_shop.public.raw_orders"
+        sql = "SELECT customer_id FROM analytics.public.raw_orders"
         validate_sql(sql, {"customer_id"})
 
     def test_ignores_as_alias(self):
-        sql = "SELECT customer_id AS customer_key FROM cascade_shop.public.stg_orders"
+        sql = "SELECT customer_id AS customer_key FROM analytics.public.stg_orders"
         validate_sql(sql, {"customer_id"})
 
     def test_rejects_invented_qualified_column(self):
