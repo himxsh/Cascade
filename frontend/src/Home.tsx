@@ -8,7 +8,7 @@ const COMPAT = ['Python 3.11+', 'GitHub Actions', 'DataHub', 'SQL or dbt']
 export function Home() {
   return (
     <>
-      <section className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-8 px-5 pb-12 pt-10 sm:px-6 lg:min-h-[calc(100dvh-4.75rem)] lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-center lg:gap-14 lg:pt-12">
+      <section className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-8 px-5 pb-12 pt-10 sm:px-6 lg:min-h-[calc(100dvh-4.75rem)] lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.18fr)] lg:items-center lg:gap-8 lg:pt-12">
         <div className="hero-copy">
           <h1 className="display max-w-[20ch] pb-1 text-[clamp(2.15rem,5.4vw,3.5rem)] leading-[1.15]">
             Keep downstream SQL aligned with the schema.
@@ -20,15 +20,17 @@ export function Home() {
           </p>
         </div>
         <div className="hero-slab">
-          <div className="mb-5 flex justify-center lg:justify-end lg:-translate-x-10">
-            <Mark className="h-auto w-[min(100%,220px)] lg:w-[min(100%,260px)]" animate />
+          <div className="lg:-translate-x-16">
+            <div className="mb-5 flex justify-center">
+              <Mark className="h-auto w-[min(100%,240px)] lg:w-[min(100%,292px)]" animate />
+            </div>
+            <InstallPanel />
           </div>
-          <InstallPanel />
         </div>
       </section>
 
       <section className="border-y border-line bg-ink">
-        <div className="mx-auto flex max-w-[1120px] flex-wrap items-center gap-x-8 gap-y-3 px-5 py-5 sm:px-6">
+        <div className="reveal mx-auto flex max-w-[1120px] flex-wrap items-center gap-x-8 gap-y-3 px-5 py-5 sm:px-6">
           {COMPAT.map((item) => (
             <p key={item} className="cmd text-[0.7rem] tracking-wide text-mute">
               {item}
@@ -37,12 +39,12 @@ export function Home() {
         </div>
       </section>
 
-      <section className="rise mx-auto max-w-[1120px] px-5 py-24 sm:px-6 sm:py-28">
-        <h2 className="display max-w-[18ch] text-[clamp(1.85rem,4vw,2.75rem)]">
+      <section className="mx-auto max-w-[1120px] px-5 py-24 sm:px-6 sm:py-28">
+        <h2 className="reveal display max-w-[18ch] text-[clamp(1.85rem,4vw,2.75rem)]">
           From the schema PR to the follow-up.
         </h2>
-        <div className="mt-14 space-y-6 md:space-y-8">
-          <article className="md:max-w-[88%]">
+        <div className="reveal-list mt-14 space-y-6 md:space-y-8">
+          <article className="reveal md:max-w-[88%]">
             <h3 className="text-lg font-semibold tracking-tight">
               Schema PR
             </h3>
@@ -57,7 +59,7 @@ export function Home() {
             />
           </article>
 
-          <article className="md:ml-auto md:max-w-[88%]">
+          <article className="reveal md:ml-auto md:max-w-[88%]">
             <h3 className="text-lg font-semibold tracking-tight">
               Downstream impact
             </h3>
@@ -69,7 +71,7 @@ export function Home() {
             <GhComment />
           </article>
 
-          <article className="md:max-w-[92%]">
+          <article className="reveal md:max-w-[92%]">
             <h3 className="text-lg font-semibold tracking-tight">
               Follow-up PR
             </h3>
@@ -82,15 +84,15 @@ export function Home() {
         </div>
       </section>
 
-      <section className="rise mx-auto max-w-[1120px] px-5 py-24 sm:px-6">
-        <h2 className="display max-w-[16ch] text-[clamp(1.85rem,4vw,2.75rem)]">
+      <section className="reveal-list mx-auto max-w-[1120px] px-5 py-24 sm:px-6">
+        <h2 className="reveal display max-w-[16ch] text-[clamp(1.85rem,4vw,2.75rem)]">
           Keep the schema and the models in the same review.
         </h2>
-        <p className="mt-5 max-w-[62ch] text-mute">
+        <p className="reveal mt-5 max-w-[62ch] text-mute">
           Add the Action to a repo. Cascade comments on the source PR and opens
           a follow-up with the rewritten SQL.
         </p>
-        <div className="mt-10">
+        <div className="reveal mt-10">
           <Link href="/docs" className="btn btn-ember">
             Read the docs
           </Link>

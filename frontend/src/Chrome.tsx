@@ -49,7 +49,7 @@ export function Chrome({
 
       <div id="main">{children}</div>
 
-      <footer className="mx-auto mt-8 max-w-[1120px] px-5 pb-12 pt-10 sm:px-6">
+      <footer className="reveal mx-auto mt-8 max-w-[1120px] px-5 pb-12 pt-10 sm:px-6">
         <div className="hairline mb-8 h-px" />
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>

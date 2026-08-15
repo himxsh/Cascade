@@ -88,11 +88,11 @@ export function InstallPanel() {
         id={`${tabId}-panel`}
         role="tabpanel"
         aria-labelledby={`${tabId}-${tab}`}
-        className="p-4 sm:p-5"
+        className="p-5 sm:p-7"
       >
         <p className="mb-3 text-sm leading-relaxed text-mute">{hint(tab)}</p>
         <div className="flex items-stretch gap-2">
-          <pre className="cmd min-w-0 flex-1 overflow-x-auto rounded-[10px] bg-void px-3 py-3 text-frost">
+          <pre className="cmd min-w-0 flex-1 overflow-x-auto rounded-[10px] bg-void px-4 py-4 text-[0.875rem] text-frost">
             <code>{command}</code>
           </pre>
           <button
