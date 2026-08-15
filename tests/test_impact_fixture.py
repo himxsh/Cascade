@@ -2,12 +2,15 @@ import json
 import unittest
 from pathlib import Path
 
+from cascade.agent import choose_and_rewrite
 from cascade.datahub_fixture import (
     get_downstream_lineage,
     get_ml_impact,
     get_owners,
     get_schema_fields,
     load_catalog,
+    parse_schema_field_urn,
+    schema_field_urn,
 )
 from cascade.impact import build_impact_report
 
@@ -72,6 +75,61 @@ class TestImpactFixture(unittest.TestCase):
         report = build_impact_report(RAW_URN, changes, fixture_path=str(FIXTURE))
         d = report.to_dict()
         json.dumps(d)
+
+
+class TestColumnLineage(unittest.TestCase):
+    def setUp(self):
+        self.catalog = load_catalog(FIXTURE)
+        self.dim = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.dim_date,PROD)"
+        self.catalog["datasets_by_urn"] = dict(self.catalog["datasets_by_urn"])
+        self.catalog["datasets_by_urn"][self.dim] = {
+            "urn": self.dim,
+            "schema_fields": [{"name": "day", "type": "date"}],
+            "owners": [],
+        }
+        dm = {k: list(v) for k, v in self.catalog["downstream_map"].items()}
+        dm[RAW_URN] = list(dm[RAW_URN]) + [self.dim]
+        self.catalog["downstream_map"] = dm
+        self.catalog["column_edges"] = [
+            {"source": RAW_URN, "field": "user_id", "target": STG_URN, "target_field": "user_id"},
+            {"source": STG_URN, "field": "user_id", "target": FCT_URN, "target_field": "user_id"},
+            {"source": FCT_URN, "field": "user_id", "target": FEATURES_URN, "target_field": "user_id"},
+        ]
+
+    def test_parse_schema_field_urn(self):
+        urn = schema_field_urn(RAW_URN, "user_id")
+        self.assertEqual(parse_schema_field_urn(urn), (RAW_URN, "user_id"))
+
+    def test_filters_to_column_consumers(self):
+        urns = get_downstream_lineage(RAW_URN, self.catalog, fields={"user_id"})
+        self.assertIn(STG_URN, urns)
+        self.assertIn(FCT_URN, urns)
+        self.assertIn(FEATURES_URN, urns)
+        self.assertNotIn(self.dim, urns)
+
+    def test_empty_column_lineage_keeps_table_blast_radius(self):
+        self.catalog["column_edges"] = []
+        urns = get_downstream_lineage(RAW_URN, self.catalog, fields={"user_id"})
+        self.assertIn(self.dim, urns)
+
+    def test_impact_report_drops_unrelated_table(self):
+        changes = [
+            {"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id",
+             "detected_by": "heuristic"}
+        ]
+        report = build_impact_report(RAW_URN, changes, catalog=self.catalog)
+        downstream = {n["urn"] for n in report.downstream}
+        self.assertNotIn(self.dim, downstream)
+        self.assertIn(STG_URN, downstream)
+
+    def test_rewrite_skips_unrelated_table(self):
+        remediations = choose_and_rewrite(
+            changes=[{"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id"}],
+            catalog=self.catalog,
+            source_urn=RAW_URN,
+            rewrite_mode="deterministic",
+        )
+        self.assertNotIn(self.dim, {r["urn"] for r in remediations})
 
 
 if __name__ == "__main__":

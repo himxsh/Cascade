@@ -20,6 +20,7 @@ from urllib.error import URLError, HTTPError
 from urllib.request import Request, urlopen
 
 from cascade.config import CascadeConfig, load_config, resolve_model_path, resolve_rewrite_mode
+from cascade.datahub_fixture import fields_from_changes, get_downstream_lineage
 from cascade.schema_gate import validate_rename_semantics, validate_sql
 from cascade.rewrite import rename_column
 
@@ -109,23 +110,15 @@ def _change_column_names(changes: list[dict[str, Any]]) -> set[str]:
     return names
 
 
-def _all_downstream_urns(catalog: dict[str, Any], source_urn: str | None) -> list[str]:
-    downstream_map = catalog.get("downstream_map", {})
-    all_downstream: list[str] = []
-    seen: set[str] = set()
-    queue = list(downstream_map.get(source_urn or "", []))
-    for urn in queue:
-        if urn not in seen:
-            seen.add(urn)
-            all_downstream.append(urn)
-    while queue:
-        current = queue.pop(0)
-        for child in downstream_map.get(current, []):
-            if child not in seen:
-                seen.add(child)
-                all_downstream.append(child)
-                queue.append(child)
-    return all_downstream
+def _all_downstream_urns(
+    catalog: dict[str, Any],
+    source_urn: str | None,
+    changes: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    fields = fields_from_changes(changes or [])
+    return get_downstream_lineage(
+        source_urn or "", catalog, fields=fields or None
+    )
 
 
 def _upstream_urns(catalog: dict[str, Any], urn: str) -> list[str]:
@@ -182,7 +175,7 @@ def _demo_choose_and_rewrite(
         if c["type"] == "FIELD_RENAMED" and c.get("from") and c.get("to"):
             renames[c["from"]] = c["to"]
 
-    all_downstream = _all_downstream_urns(catalog, source_urn)
+    all_downstream = _all_downstream_urns(catalog, source_urn, changes)
     handled_urns: set[str] = set()
 
     for urn in all_downstream:
@@ -415,7 +408,7 @@ def choose_and_rewrite(
 
     out: list[dict[str, Any]] = []
     used_llm = False
-    for urn in _all_downstream_urns(catalog, source_urn):
+    for urn in _all_downstream_urns(catalog, source_urn, changes):
         fallback = demo_by_urn.get(urn) or []
         model_path = _model_path_for_urn(urn, models_dir, files)
         model_sql = model_path.read_text() if model_path else None

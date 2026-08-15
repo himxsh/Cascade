@@ -294,7 +294,7 @@ cd frontend && npm install && npm run dev
 ## Limitations
 
 - No lineage in DataHub means no blast radius. Cascade will not invent the graph.
-- Column-level lineage is not required; without it, impact is table-level.
+- When DataHub has column-level lineage, blast radius is the datasets that consume the changed columns. Missing column lineage falls back to table-level — never “no impact.”
 - Downstream in another GitHub repository is out of scope.
 - Non-SQL consumers are out of scope.
 

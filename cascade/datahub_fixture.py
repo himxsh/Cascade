@@ -22,6 +22,126 @@ def _default_fixture_path() -> Path | None:
     return None
 
 
+def schema_field_urn(dataset_urn: str, field: str) -> str:
+    return f"urn:li:schemaField:({dataset_urn},{field})"
+
+
+def parse_schema_field_urn(urn: str) -> tuple[str, str] | None:
+    prefix = "urn:li:schemaField:("
+    if not urn.startswith(prefix) or not urn.endswith(")"):
+        return None
+    inner = urn[len(prefix) : -1]
+    depth = 0
+    for i, ch in enumerate(inner):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                rest = inner[i + 1 :]
+                if rest.startswith(","):
+                    return inner[: i + 1], rest[1:]
+                return None
+    return None
+
+
+def lineage_dataset_urn(urn: str) -> str | None:
+    if urn.startswith("urn:li:dataset:"):
+        return urn
+    parsed = parse_schema_field_urn(urn)
+    return parsed[0] if parsed else None
+
+
+def fields_from_changes(changes: list[dict[str, Any]]) -> set[str]:
+    names: set[str] = set()
+    for c in changes:
+        kind = c.get("type")
+        if kind in ("FIELD_REMOVED", "FIELD_RENAMED") and c.get("from"):
+            names.add(str(c["from"]))
+        elif kind == "FIELD_TYPE_CHANGED":
+            names.add(str(c.get("from") or c.get("field") or ""))
+    names.discard("")
+    return names
+
+
+def edges_from_fine_grained(lineages: list[dict[str, Any]] | None) -> list[dict[str, str]]:
+    def _ref(ref: dict[str, Any]) -> tuple[str, str] | None:
+        urn = str(ref.get("urn") or "")
+        path = str(ref.get("path") or "")
+        parsed = parse_schema_field_urn(urn)
+        if parsed:
+            return parsed[0], parsed[1] or path
+        ds = lineage_dataset_urn(urn)
+        if ds and path:
+            return ds, path
+        return None
+
+    edges: list[dict[str, str]] = []
+    for lin in lineages or []:
+        for up in lin.get("upstreams") or []:
+            src = _ref(up)
+            if not src:
+                continue
+            for down in lin.get("downstreams") or []:
+                tgt = _ref(down)
+                if not tgt:
+                    continue
+                edges.append({
+                    "source": src[0],
+                    "field": src[1],
+                    "target": tgt[0],
+                    "target_field": tgt[1] or src[1],
+                })
+    return edges
+
+
+def _column_edges_from_raw(data: dict[str, Any]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for e in data.get("column_lineage") or []:
+        src, field, tgt = e.get("source"), e.get("field"), e.get("target")
+        if src and field and tgt:
+            out.append({
+                "source": str(src),
+                "field": str(field),
+                "target": str(tgt),
+                "target_field": str(e.get("target_field") or field),
+            })
+    return out
+
+
+def _column_index(
+    catalog: dict[str, Any],
+) -> dict[tuple[str, str], list[tuple[str, str]]]:
+    idx: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    for e in catalog.get("column_edges") or []:
+        key = (e["source"], e["field"].lower())
+        idx.setdefault(key, []).append(
+            (e["target"], (e.get("target_field") or e["field"]).lower())
+        )
+    return idx
+
+
+def _column_consumers(
+    source_urn: str, fields: set[str], catalog: dict[str, Any]
+) -> dict[str, set[str]]:
+    idx = _column_index(catalog)
+    per_field: dict[str, set[str]] = {}
+    for field in fields:
+        found: set[str] = set()
+        queue: deque[tuple[str, str]] = deque([(source_urn, field.lower())])
+        seen: set[tuple[str, str]] = set()
+        while queue:
+            node = queue.popleft()
+            if node in seen:
+                continue
+            seen.add(node)
+            for tgt, tf in idx.get(node, []):
+                found.add(tgt)
+                queue.append((tgt, tf))
+        per_field[field] = found
+    return per_field
+
+
 def load_catalog(fixture_path: str | Path | None = None) -> dict[str, Any]:
     path = fixture_path or os.environ.get("CASCADE_FIXTURE_PATH") or _default_fixture_path()
     if path is None or not Path(path).is_file():
@@ -52,6 +172,7 @@ def load_catalog(fixture_path: str | Path | None = None) -> dict[str, Any]:
     return {
         "datasets_by_urn": datasets_by_urn,
         "downstream_map": downstream_map,
+        "column_edges": _column_edges_from_raw(data),
         "ml_features_by_name": ml_features_by_name,
         "ml_models_by_feature_urn": ml_models_by_feature_urn,
         "all_ml_features": data.get("mlFeatures", []),
@@ -78,7 +199,11 @@ def get_owners(urn: str, catalog: dict[str, Any]) -> list[str]:
     return []
 
 
-def get_downstream_lineage(urn: str, catalog: dict[str, Any]) -> list[str]:
+def get_downstream_lineage(
+    urn: str,
+    catalog: dict[str, Any],
+    fields: set[str] | None = None,
+) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
     queue: deque[str] = deque()
@@ -100,7 +225,14 @@ def get_downstream_lineage(urn: str, catalog: dict[str, Any]) -> list[str]:
                     ordered.append(child)
                     queue.append(child)
 
-    return ordered
+    # ponytail: empty column lineage = missing graph, not "no impact" — fall back to tables.
+    if not fields:
+        return ordered
+    per_field = _column_consumers(urn, fields, catalog)
+    if not per_field or any(not hits for hits in per_field.values()):
+        return ordered
+    keep = set().union(*per_field.values())
+    return [u for u in ordered if u in keep]
 
 
 def get_ml_impact(

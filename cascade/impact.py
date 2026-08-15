@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from cascade.datahub_fixture import get_downstream_lineage, get_ml_impact, load_catalog
+from cascade.datahub_fixture import (
+    fields_from_changes,
+    get_downstream_lineage,
+    get_ml_impact,
+    load_catalog,
+)
 from cascade.models import ImpactReport
 
 
@@ -15,15 +20,11 @@ def build_impact_report(
     if catalog is None:
         catalog = load_catalog(fixture_path)
 
-    changed_field_names = set()
-    for c in changes:
-        if c["type"] in ("FIELD_REMOVED", "FIELD_RENAMED"):
-            if c.get("from"):
-                changed_field_names.add(c["from"])
-        elif c["type"] == "FIELD_TYPE_CHANGED":
-            changed_field_names.add(c.get("from") or c.get("field", ""))
+    changed_field_names = fields_from_changes(changes)
 
-    downstream_urns = get_downstream_lineage(source_urn, catalog)
+    downstream_urns = get_downstream_lineage(
+        source_urn, catalog, fields=changed_field_names or None
+    )
     blast_radius = {source_urn} | set(downstream_urns)
 
     downstream_nodes = []

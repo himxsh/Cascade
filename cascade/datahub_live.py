@@ -9,7 +9,12 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
-from cascade.datahub_fixture import load_catalog
+from cascade.datahub_fixture import (
+    edges_from_fine_grained,
+    lineage_dataset_urn,
+    load_catalog,
+    schema_field_urn,
+)
 
 
 def _gms_url() -> str:
@@ -64,17 +69,39 @@ GET_DATASET = """query getDataset($urn: String!) {
         }
       }
     }
+    fineGrainedLineages {
+      upstreams { urn path }
+      downstreams { urn path }
+    }
   }
 }"""
 
-GET_LINEAGE = """query getLineage($urn: String!, $direction: LineageDirection!, $start: Int, $count: Int) {
+GET_DATASET_NO_FGL = """query getDataset($urn: String!) {
+  dataset(urn: $urn) {
+    urn
+    properties { name description }
+    schemaMetadata {
+      fields { fieldPath nativeDataType }
+    }
+    ownership {
+      owners {
+        owner {
+          ... on CorpUser { urn }
+          ... on CorpGroup { urn }
+        }
+      }
+    }
+  }
+}"""
+
+GET_LINEAGE = """query getLineage($urn: String!, $direction: LineageDirection!, $start: Int, $count: Int, $degrees: [String!]) {
   searchAcrossLineage(input: {
     urn: $urn
     direction: $direction
     query: "*"
     start: $start
     count: $count
-    orFilters: [{ and: [{ field: "degree", values: ["1"], condition: EQUAL }] }]
+    orFilters: [{ and: [{ field: "degree", values: $degrees, condition: EQUAL }] }]
   }) {
     total
     searchResults {
@@ -92,12 +119,24 @@ GET_ML_MODEL = """query getMlModel($urn: String!) {
 }"""
 
 
+_use_fgl = True
+
+
 def fetch_dataset(
     urn: str, gms_url: str | None = None, token: str | None = None
 ) -> dict[str, Any] | None:
+    global _use_fgl
     url = gms_url or _gms_url()
     tok = token or _gms_token()
-    result = _graphql(url, GET_DATASET, {"urn": urn}, tok)
+    query = GET_DATASET if _use_fgl else GET_DATASET_NO_FGL
+    try:
+        result = _graphql(url, query, {"urn": urn}, tok)
+    except ValueError as e:
+        if _use_fgl and "finegrained" in str(e).lower():
+            _use_fgl = False
+            result = _graphql(url, GET_DATASET_NO_FGL, {"urn": urn}, tok)
+        else:
+            raise
     data = result.get("data", {}).get("dataset")
     if not data:
         return None
@@ -116,13 +155,17 @@ def fetch_dataset(
         "name": props.get("name", urn),
         "schema_fields": fields,
         "owners": owners,
+        "fine_grained_lineages": data.get("fineGrainedLineages") or [],
     }
 
 
 def fetch_downstream_lineage(
-    urn: str, gms_url: str | None = None, token: str | None = None
+    urn: str,
+    gms_url: str | None = None,
+    token: str | None = None,
+    degrees: tuple[str, ...] = ("1",),
 ) -> list[str]:
-    """One-hop downstream URNs via searchAcrossLineage (DataHub 1.x GraphQL)."""
+    """Downstream URNs via searchAcrossLineage (DataHub 1.x GraphQL)."""
     url = gms_url or _gms_url()
     tok = token or _gms_token()
     urns: list[str] = []
@@ -130,7 +173,16 @@ def fetch_downstream_lineage(
     count = 100
     while True:
         result = _graphql(
-            url, GET_LINEAGE, {"urn": urn, "direction": "DOWNSTREAM", "start": start, "count": count}, tok
+            url,
+            GET_LINEAGE,
+            {
+                "urn": urn,
+                "direction": "DOWNSTREAM",
+                "start": start,
+                "count": count,
+                "degrees": list(degrees),
+            },
+            tok,
         )
         page = result.get("data", {}).get("searchAcrossLineage") or {}
         hits = page.get("searchResults") or []
@@ -248,14 +300,45 @@ def load_catalog_live(
                     queue.append(child)
 
     datasets_by_urn: dict[str, dict[str, Any]] = {}
+    column_edges: list[dict[str, str]] = []
     for urn in ordered:
         ds = fetch_dataset(urn, url, tok)
         if ds:
+            column_edges.extend(edges_from_fine_grained(ds.pop("fine_grained_lineages", [])))
             datasets_by_urn[urn] = ds
+
+    # ponytail: FGL empty → one schemaField walk from the seed table only, not every hop.
+    if not column_edges:
+        seed_ds = datasets_by_urn.get(seed_urn) or {}
+        for field in seed_ds.get("schema_fields") or []:
+            name = field.get("name")
+            if not name:
+                continue
+            try:
+                kids = fetch_downstream_lineage(
+                    schema_field_urn(seed_urn, name),
+                    url,
+                    tok,
+                    degrees=("1", "2", "3+"),
+                )
+            except ValueError:
+                break
+            seen: set[str] = set()
+            for kid in kids:
+                tgt = lineage_dataset_urn(kid)
+                if tgt and tgt != seed_urn and tgt not in seen:
+                    seen.add(tgt)
+                    column_edges.append({
+                        "source": seed_urn,
+                        "field": name,
+                        "target": tgt,
+                        "target_field": name,
+                    })
 
     catalog: dict[str, Any] = {
         "datasets_by_urn": datasets_by_urn,
         "downstream_map": dm,
+        "column_edges": column_edges,
         "ml_features_by_name": {},
         "ml_models_by_feature_urn": {},
         "all_ml_features": [],

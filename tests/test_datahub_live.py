@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from cascade.datahub_fixture import load_catalog
+from cascade.datahub_fixture import schema_field_urn
 from cascade.datahub_live import (
     _graphql,
     fetch_dataset,
@@ -234,6 +234,55 @@ class TestLoadCatalogLive(unittest.TestCase):
         catalog = load_catalog_live(RAW_URN, "http://fake:8080", fixture_path="/nonexistent/fixture.json")
         self.assertEqual(catalog["ml_features_by_name"], {})
         self.assertEqual(catalog["ml_models_by_feature_urn"], {})
+
+    def test_load_catalog_live_fine_grained_column_edges(self):
+        def side_effect(url, query, variables, token):
+            if "getLineage" in query or "searchAcrossLineage" in query:
+                urn = variables["urn"]
+                children = {RAW_URN: [STG_URN], STG_URN: []}.get(urn, [])
+                return {
+                    "data": {
+                        "searchAcrossLineage": {
+                            "total": len(children),
+                            "searchResults": [
+                                {"degree": 1, "entity": {"urn": c, "type": "DATASET"}}
+                                for c in children
+                            ],
+                        }
+                    }
+                }
+            if "getDataset" in query:
+                urn = variables["urn"]
+                fgl = []
+                if urn == RAW_URN:
+                    fgl = [{
+                        "upstreams": [{"urn": schema_field_urn(RAW_URN, "user_id"), "path": "user_id"}],
+                        "downstreams": [{"urn": schema_field_urn(STG_URN, "user_id"), "path": "user_id"}],
+                    }]
+                return {
+                    "data": {
+                        "dataset": {
+                            "urn": urn,
+                            "properties": {"name": "t"},
+                            "schemaMetadata": {"fields": [{"fieldPath": "col1", "nativeDataType": "int"}]},
+                            "ownership": {"owners": []},
+                            "fineGrainedLineages": fgl,
+                        }
+                    }
+                }
+            return {"data": {}}
+
+        with patch("cascade.datahub_live._graphql", side_effect=side_effect):
+            catalog = load_catalog_live(RAW_URN, "http://fake:8080")
+        self.assertEqual(
+            catalog["column_edges"],
+            [{
+                "source": RAW_URN,
+                "field": "user_id",
+                "target": STG_URN,
+                "target_field": "user_id",
+            }],
+        )
 
 
 class TestResolveCatalog(unittest.TestCase):
