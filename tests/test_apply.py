@@ -138,7 +138,8 @@ class TestGitHubAct(unittest.TestCase):
             self.assertIn("-    user_id,", patch)
             self.assertIn("+    customer_id,", patch)
             body = Path(tmp, "downstream_pr.md").read_text()
-            self.assertIn("@alice", body)
+            self.assertNotIn("@alice", body)
+            self.assertNotIn("Suggested reviewers", body)
 
     def test_owner_urns_to_reviewers(self):
         from cascade.github_act import owner_urns_to_reviewers

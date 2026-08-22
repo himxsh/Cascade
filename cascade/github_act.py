@@ -346,12 +346,6 @@ def open_or_update_downstream_pr(
     else:
         pr_md_parts.extend([f"# {title}", ""])
     pr_md_parts.append(marker)
-    if reviewers:
-        pr_md_parts.append("## Suggested reviewers")
-        pr_md_parts.append("")
-        for r in reviewers:
-            pr_md_parts.append(f"- @{r}")
-        pr_md_parts.append("")
     pr_body = "\n".join(pr_md_parts)
 
     meta: dict[str, Any] = {
