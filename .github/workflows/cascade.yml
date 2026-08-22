@@ -1,7 +1,7 @@
 name: Cascade Act
 
 # fixture-ci: offline golden path (hardcoded example diff) — no GMS secrets needed.
-# pr-impact: real PR base…head SQL/model/schema diff → impact + remediation PR + comment.
+# pr-impact: comments on the source PR; stacked PR only on `/cascade stack`.
 # Live GMS when DATAHUB_GMS_URL secret is set; else --source auto falls back to fixture.
 
 on:
@@ -15,6 +15,8 @@ on:
       - ".cascade/config.json"
       - "cascade/**"
       - ".github/workflows/cascade.yml"
+  issue_comment:
+    types: [created]
   workflow_dispatch:
   push:
     paths:
@@ -26,6 +28,7 @@ on:
 
 jobs:
   fixture-ci:
+    if: github.event_name != 'issue_comment'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,10 +64,17 @@ jobs:
           path: artifacts/fixture/
 
   pr-impact:
-    # Skip Cascade's own remediation PRs (avoid feedback loops).
+    # Skip Cascade's own stacked PRs (avoid feedback loops).
     if: >
-      github.event_name == 'pull_request' &&
-      !startsWith(github.head_ref, 'cascade/remediation/')
+      (github.event_name == 'pull_request' &&
+       !startsWith(github.head_ref, 'cascade/remediation/')) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/cascade stack') &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR' ||
+        github.event.comment.user.login == github.event.issue.user.login))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -73,17 +83,42 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.issue.number) }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install
         run: pip install -e .
+      - name: Resolve PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "issue_comment" ]; then
+            N="${{ github.event.issue.number }}"
+            gh api "repos/${GITHUB_REPOSITORY}/pulls/${N}" | python3 -c '
+          import json, os, sys
+          p = json.load(sys.stdin)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              if str(p["head"]["ref"]).startswith("cascade/remediation/"):
+                  f.write("skip=true\n")
+              else:
+                  f.write("number=%s\n" % p["number"])
+                  f.write("base_sha=%s\n" % p["base"]["sha"])
+                  f.write("head_sha=%s\n" % p["head"]["sha"])
+          '
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "base_sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          fi
       - name: Compute PR diff
         id: diff
+        if: steps.pr.outputs.skip != 'true'
         run: |
           mkdir -p artifacts/pr
-          BASE="${{ github.event.pull_request.base.sha }}"
-          HEAD="${{ github.event.pull_request.head.sha }}"
+          BASE="${{ steps.pr.outputs.base_sha }}"
+          HEAD="${{ steps.pr.outputs.head_sha }}"
           mapfile -t FILES < <(
             git diff --name-only "${BASE}...${HEAD}" \
               | grep -E '\.sql$|(^|/)models/|schema\.ya?ml$' || true
@@ -98,7 +133,7 @@ jobs:
             wc -l artifacts/pr/pr.diff
           fi
       - name: Impact + generate (PR diff)
-        if: steps.diff.outputs.empty != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.empty != 'true'
         env:
           DATAHUB_GMS_URL: ${{ secrets.DATAHUB_GMS_URL }}
           DATAHUB_TOKEN: ${{ secrets.DATAHUB_TOKEN }}
@@ -119,24 +154,23 @@ jobs:
             --generate \
             --out artifacts/pr/generate \
             > artifacts/pr/impact_stdout.json
-      - name: Apply (comment + remediation PR)
-        if: steps.diff.outputs.empty != 'true'
+      - name: Apply (comment, or stacked PR on /cascade stack)
+        if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.empty != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          CASCADE_PR_NUMBER: ${{ github.event.pull_request.number }}
-          CASCADE_OPEN_DOWNSTREAM_PR: "1"
-          CASCADE_DOWNSTREAM_BASE: ${{ github.event.pull_request.base.ref }}
-          CASCADE_RUN_ID: pr-${{ github.event.pull_request.number }}-${{ github.run_id }}
+          CASCADE_PR_NUMBER: ${{ steps.pr.outputs.number }}
+          CASCADE_OPEN_DOWNSTREAM_PR: ${{ github.event_name == 'issue_comment' && '1' || '' }}
+          CASCADE_RUN_ID: pr-${{ steps.pr.outputs.number }}-${{ github.run_id }}
         run: |
           cascade apply \
             --report artifacts/pr/generate/impact_report.json \
             --out artifacts/pr/apply \
             --mode apply \
             --require-policy \
-            --pr-number "${{ github.event.pull_request.number }}"
+            --pr-number "${{ steps.pr.outputs.number }}"
       - name: Upload PR artifacts
-        if: steps.diff.outputs.empty != 'true'
+        if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.empty != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: cascade-pr

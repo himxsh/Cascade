@@ -24,8 +24,19 @@ docs/
 MISSION.md
 RESOURCES.md
 NOTES.md
+DESIGN.md
+PRODUCT.md
 /lessons/
 /learning-records/
 /reference/
 /assets/
+.impeccable/
+
+# Not part of the install path
+oss/
+examples/mean/
+examples/pr-after-breaking-change.md
+demo/check_mean_graph.py
+demo/fixtures/mean_graph.json
+tests/test_mean_fixture.py
 

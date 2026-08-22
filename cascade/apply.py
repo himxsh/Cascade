@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -104,7 +105,16 @@ def run_apply(
             dry_run=True if force_dry else None,
         )
 
-    policy = evaluate_policy(report, remediation_open=remediation_open)
+    stack_requested = os.environ.get("CASCADE_OPEN_DOWNSTREAM_PR", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    policy = evaluate_policy(
+        report,
+        remediation_open=remediation_open,
+        stack_requested=stack_requested,
+    )
 
     summary: dict[str, Any] = {
         "out_dir": str(out),

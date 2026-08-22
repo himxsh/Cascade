@@ -127,18 +127,10 @@ export function GhComment() {
             <p>
               This pull request renames <code className="gh-code">user_id</code> to{' '}
               <code className="gh-code">customer_id</code> on{' '}
-              <code className="gh-code">raw_orders</code>.
+              <code className="gh-code">raw_orders</code>. 3 downstream models
+              still depend on it.
             </p>
-            <p className="text-[#8b949e]">These files still use the old name:</p>
-            <ul className="gh-mono space-y-1 text-[13px] text-[#2f81f7]">
-              <li>models/stg_orders.sql</li>
-              <li>models/fct_orders.sql</li>
-              <li>models/features_orders.sql</li>
-            </ul>
-            <p>
-              I opened a follow-up with the edits:{' '}
-              <span className="text-[#2f81f7]">#185</span>
-            </p>
+            <p className="text-[#8b949e]">Comment /cascade stack to open a stacked PR.</p>
           </div>
         </div>
       </div>

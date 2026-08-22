@@ -1,4 +1,4 @@
-"""GitHub markdown: short source-PR comment + human remediation PR body.
+"""GitHub markdown: source-PR comment (clear or summary + stack) + remediation PR body.
 
 Mermaid is filled from ImpactReport (stdlib). The LLM does not write this."""
 
@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 COMMENT_MARKER = "## Cascade impact report"
+STACK_COMMAND = "/cascade stack"
 _MAX_GRAPH_NODES = 15
 _ID_RE = re.compile(r"[^A-Za-z0-9_]")
 
@@ -115,18 +116,34 @@ def build_remediation_title(report: dict[str, Any]) -> str:
     return f"Fix {n} downstream models after schema change"
 
 
+def _has_rewrite_files(report: dict[str, Any]) -> bool:
+    return any(r.get("path") and r.get("rewritten_sql") for r in report.get("remediations") or [])
+
+
 def build_pr_comment(
     report: dict[str, Any],
     *,
     remediation_pr_url: str | None = None,
 ) -> str:
-    """Short comment on the source (breaking) PR."""
+    """Short comment on the source PR: clear, or blast radius + stack option."""
     source = _short_name(str(report.get("source_urn") or "unknown"))
     severity = report.get("severity", "unknown")
     n = len(report.get("downstream") or [])
     phrase = _change_phrase(report.get("changes") or [])
     remediations = report.get("remediations") or []
     agent = _agent_label(remediations)
+    source_line = f"**Source:** `{report.get('source_urn', '(unknown)')}`"
+    if n == 0:
+        return "\n".join([
+            COMMENT_MARKER,
+            "",
+            "**No changes needed.** No downstream models depend on this schema change.",
+            "",
+            f"**What changed:** {phrase} on `{source}`",
+            "",
+            source_line,
+            "",
+        ])
     lines = [
         COMMENT_MARKER,
         "",
@@ -139,10 +156,13 @@ def build_pr_comment(
     if graph:
         lines.extend(["```mermaid", graph, "```", ""])
     if remediation_pr_url:
-        lines.append(f"**Remediation PR:** {remediation_pr_url}")
+        lines.append(f"**Stacked PR:** {remediation_pr_url}")
         lines.append("")
-    elif remediations:
-        lines.append("Cascade opened (or will open) a remediation PR with the SQL fix.")
+    elif _has_rewrite_files(report):
+        lines.append(
+            f"Comment `{STACK_COMMAND}` to open a stacked PR with this branch's "
+            "commits plus the downstream rewrites."
+        )
         lines.append("")
     ml_impact = report.get("ml_impact") or []
     if ml_impact:
@@ -150,7 +170,7 @@ def build_pr_comment(
             f"`{_short_name(str(m.get('model_urn')))}`" for m in ml_impact
         ))
         lines.append("")
-    lines.append(f"**Source:** `{report.get('source_urn', '(unknown)')}`")
+    lines.append(source_line)
     lines.append("")
     return "\n".join(lines)
 

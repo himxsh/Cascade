@@ -9,19 +9,21 @@ def evaluate_policy(
     report: dict[str, Any],
     *,
     remediation_open: bool = False,
+    stack_requested: bool = False,
 ) -> dict[str, Any]:
     """Return ok/fail for production gates.
 
-    Current rule: severity=high requires an open (or just-opened) remediation PR.
+    Comment-first is ok. Opening a stacked PR for severity=high must succeed.
     """
     severity = str(report.get("severity") or "").lower()
-    if severity == "high" and not remediation_open:
+    if stack_requested and severity == "high" and not remediation_open:
         return {
             "ok": False,
             "code": "high_without_remediation",
-            "message": "severity=high but no remediation PR is open",
+            "message": "severity=high but no stacked PR is open",
             "severity": severity,
             "remediation_open": False,
+            "stack_requested": True,
         }
     return {
         "ok": True,
@@ -29,4 +31,5 @@ def evaluate_policy(
         "message": "policy ok",
         "severity": severity or "unknown",
         "remediation_open": remediation_open,
+        "stack_requested": stack_requested,
     }

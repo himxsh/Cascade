@@ -15,7 +15,7 @@ export function Home() {
           </h1>
           <p className="mt-5 max-w-[42ch] text-[1.05rem] leading-relaxed text-mute">
             On a schema PR, Cascade uses DataHub to find models still on the old
-            schema, rewrites them in git, and opens a follow-up for review. No
+            schema and comments what is affected. A stacked PR is opt-in. No
             warehouse connection.
           </p>
         </div>
@@ -41,7 +41,7 @@ export function Home() {
 
       <section className="mx-auto max-w-[1120px] px-5 py-24 sm:px-6 sm:py-28">
         <h2 className="reveal display max-w-[18ch] text-[clamp(1.85rem,4vw,2.75rem)]">
-          From the schema PR to the follow-up.
+          From the schema PR to the stacked PR.
         </h2>
         <div className="reveal-list mt-14 space-y-6 md:space-y-8">
           <article className="reveal md:max-w-[88%]">
@@ -73,11 +73,11 @@ export function Home() {
 
           <article className="reveal md:max-w-[92%]">
             <h3 className="text-lg font-semibold tracking-tight">
-              Follow-up PR
+              Stacked PR
             </h3>
             <p className="mt-2 max-w-[62ch] text-mute">
-              Those models are rewritten in a second pull request. Merge stays
-              with you.
+              Comment /cascade stack to open a PR with this branch&apos;s
+              commits plus the downstream rewrites. Merge stays with you.
             </p>
             <GhPull />
           </article>
@@ -89,8 +89,8 @@ export function Home() {
           Keep the schema and the models in the same review.
         </h2>
         <p className="reveal mt-5 max-w-[62ch] text-mute">
-          Add the Action to a repo. Cascade comments on the source PR and opens
-          a follow-up with the rewritten SQL.
+          Add the Action to a repo. Cascade comments on the source PR. Comment
+          /cascade stack when you want the rewritten SQL as a stacked PR.
         </p>
         <div className="reveal mt-10">
           <Link href="/docs" className="btn btn-ember">

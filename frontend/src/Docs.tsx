@@ -86,7 +86,7 @@ function DocBody({ id }: { id: DocId }) {
 cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}</GhCode>
               <P>
                 This only writes files on your laptop. The GitHub Action is what
-                comments and opens the follow-up pull request.
+                comments. Comment /cascade stack to open a stacked PR.
               </P>
             </li>
           </ol>
@@ -181,7 +181,8 @@ LLM_MODEL=`}</GhCode>
           <H>GitHub Action</H>
           <P>
             Add the workflow to .github/workflows. It runs when a pull request
-            changes SQL files. It skips Cascade's own follow-up branches. It
+            changes SQL files. It comments first. Comment /cascade stack to
+            open a stacked PR. It skips Cascade's own stacked branches. It
             stops if DataHub is missing.
           </P>
           <P>
@@ -271,13 +272,12 @@ LLM_MODEL=`}</GhCode>
             </li>
             <li>
               <span className="font-semibold text-frost">apply</span> comments on
-              the original pull request and can open a follow-up PR. By default
-              it only writes local files.
+              the original pull request. A stacked PR opens only if someone
+              comments /cascade stack. By default it only writes local files.
             </li>
             <li>
               <span className="font-semibold text-frost">policy</span> fails the
-              GitHub check if leftover files were not updated in a follow-up
-              pull request.
+              GitHub check if a stacked PR was requested but did not open.
             </li>
             <li>
               <span className="font-semibold text-frost">demo</span> is for

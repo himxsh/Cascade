@@ -29,7 +29,7 @@ flowchart LR
   D --> E[Rewrite SQL]
   E --> F[cascade apply]
   F --> G[Comment on source PR]
-  F --> H["Remediation PR<br/>cascade/remediation/N"]
+  F --> H["/cascade stack → stacked PR"]
   F --> I[DataHub tags + docs]
 ```
 
@@ -39,14 +39,15 @@ flowchart LR
 2. Cascade maps the changed paths to DataHub URNs (`.cascade/config.json`).
 3. It walks downstream lineage, owners, and ML features.
 4. It rewrites affected SQL (deterministic rename, or LLM with a schema gate).
-5. It comments the blast radius on the source PR and opens `cascade/remediation/<pr>`.
-6. On merge, it can mark the source `cascade:migrated` in DataHub.
+5. It comments on the source PR (clear, or a summary with `/cascade stack`).
+6. On `/cascade stack`, it opens `cascade/remediation/<pr>` on top of this PR's commits.
+7. On merge, it can mark the source `cascade:migrated` in DataHub.
 
 Dry-run is the default. Live GitHub and DataHub writes need explicit flags and secrets.
 
 ### Example: `user_id` → `customer_id`
 
-A source PR renames a column on `raw_orders`. Downstream models still project `user_id`. Cascade walks lineage, rewrites those files, and opens one remediation PR.
+A source PR renames a column on `raw_orders`. Downstream models still project `user_id`. Cascade walks lineage, comments the blast radius, and opens a stacked PR when you comment `/cascade stack`.
 
 ```mermaid
 flowchart TB
@@ -212,7 +213,7 @@ On merge of `cascade/remediation/*`, `[.github/workflows/cascade-migrated.yml](.
 | `cascade impact … --generate --out DIR` | Impact + rewritten SQL                                      |
 | `cascade generate --report … --out DIR` | Remediations from an existing report                        |
 | `cascade apply --report … --out DIR`    | Artifacts; live GitHub/DataHub only with `--mode apply`     |
-| `cascade policy --report …`             | High severity requires an open remediation PR               |
+| `cascade policy --report …`             | High severity + `/cascade stack` requires an open stacked PR |
 
 
 `--source`:
@@ -254,7 +255,7 @@ A key in the environment does **not** turn LLM on. Mode must be `llm`.
 | `LLM_API_KEY` or `OPENAI_API_KEY`                          | LLM path                                     |
 | `CASCADE_WRITEBACK=1`                                      | Live DataHub/ML tags (never on untrusted CI) |
 | `GITHUB_TOKEN` / `GITHUB_REPOSITORY` / `CASCADE_PR_NUMBER` | Live PR comment (Action sets these)          |
-| `CASCADE_OPEN_DOWNSTREAM_PR=1`                             | Create/update `cascade/remediation/{n}`      |
+| `CASCADE_OPEN_DOWNSTREAM_PR=1`                             | Open stacked PR (`/cascade stack` sets this) |
 
 
 See `.env.example`. Actions secrets override `.env`. There are no warehouse credentials in this contract.
@@ -265,18 +266,14 @@ See `.env.example`. Actions secrets override `.env`. There are no warehouse cred
 | Concern        | Behavior                                                                                                                   |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Modes          | `apply --mode dry-run` (default) writes artifacts only; `--mode apply` allows live GitHub/DataHub when secrets are set     |
-| Policy         | `severity=high` requires an open remediation PR (`--require-policy` / `cascade policy --require`)                          |
-| Comments       | Re-runs **edit** the existing `## Cascade impact report` comment                                                           |
-| Remediation PR | Same upstream PR → same branch `cascade/remediation/{n}`                                                                   |
+| Policy         | `severity=high` + `/cascade stack` requires an open stacked PR (`--require-policy`)                                        |
+| Comments       | Re-runs **edit** the existing `## Cascade impact report` comment (clear, or summary + stack option)                        |
+| Stacked PR     | Opt-in via `/cascade stack`. Same upstream PR → `cascade/remediation/{n}` on top of the source commits                     |
 | Audit          | Receipts under `cascade/runs/<id>/` (gitignored)                                                                           |
 | Failures       | No GMS on consumer CI → fail; no `CASCADE_OPEN_DOWNSTREAM_PR` → patch artifacts only; LLM failure → deterministic fallback |
 
 
 Dialect-specific quoting (BigQuery backticks, Snowflake `QUALIFY`, mixed-case Postgres identifiers) is not modeled yet. Plain `user_id` → `customer_id` in vanilla dbt SQL is the supported case.
-
-## DataHub skill
-
-Draft skill `[breaking-change-remediation](oss/datahub-skills/skills/breaking-change-remediation/SKILL.md)` lives under `[oss/datahub-skills/](oss/datahub-skills/)`. In-repo until an upstream contribution to `[datahub-project/datahub-skills](https://github.com/datahub-project/datahub-skills)` is coordinated.
 
 ## Optional local UI
 

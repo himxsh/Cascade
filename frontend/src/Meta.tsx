@@ -31,8 +31,9 @@ export function Security() {
       </p>
       <h2 className="mt-10 text-xl font-semibold">What the Action can do</h2>
       <p className="mt-3 text-mute">
-        It can comment on a pull request and open a follow-up branch. It cannot
-        merge. It uses the default GitHub token, not a stored personal token.
+        It can comment on a pull request. A stacked PR opens only if someone
+        comments /cascade stack. It cannot merge. It uses the default GitHub
+        token, not a stored personal token.
       </p>
       <h2 className="mt-10 text-xl font-semibold">Secrets</h2>
       <p className="mt-3 text-mute">

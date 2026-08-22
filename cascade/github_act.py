@@ -202,10 +202,14 @@ def commit_files_to_branch(
     branch: str,
     base: str,
     message: str,
+    parent_sha: str | None = None,
 ) -> dict[str, Any]:
     """Create/update branch from base with file contents via Git Data API."""
-    base_ref = _github_api("GET", f"/git/ref/heads/{_enc_ref(base)}")
-    base_sha = base_ref["object"]["sha"]
+    if parent_sha:
+        base_sha = parent_sha
+    else:
+        base_ref = _github_api("GET", f"/git/ref/heads/{_enc_ref(base)}")
+        base_sha = base_ref["object"]["sha"]
     base_commit = _github_api("GET", f"/git/commits/{base_sha}")
     base_tree = base_commit["tree"]["sha"]
 
@@ -273,6 +277,24 @@ def find_open_pr_for_head(branch: str) -> dict[str, Any] | None:
     head = urllib.parse.quote(f"{owner}:{branch}", safe="")
     pulls = _github_api_list("GET", f"/pulls?state=open&head={head}")
     return pulls[0] if pulls else None
+
+
+def _stack_refs(upstream: int) -> tuple[str | None, str | None, str | None]:
+    """Source PR head ref, base ref, and head SHA."""
+    try:
+        pull = _github_api("GET", f"/pulls/{upstream}")
+    except RuntimeError:
+        return None, None, None
+    head = pull.get("head") or {}
+    base = pull.get("base") or {}
+    head_ref = head.get("ref")
+    base_ref = base.get("ref")
+    head_sha = head.get("sha")
+    return (
+        str(head_ref) if head_ref else None,
+        str(base_ref) if base_ref else None,
+        str(head_sha) if head_sha else None,
+    )
 
 
 def request_pr_reviewers(pr_number: int, reviewers: list[str]) -> dict[str, Any]:
@@ -388,12 +410,25 @@ def open_or_update_downstream_pr(
             write_downstream_artifacts(out_dir, files, meta, patch=patch, pr_body=pr_body)
         return meta
 
-    # Happy path: commit files to cascade/remediation/{upstream_pr}, open/update PR.
+    # Happy path: commit rewrites on top of the source PR head, open/update PR
+    # targeting the source PR's base so the stacked PR includes those commits.
+    parent = base
+    parent_sha = None
+    if upstream > 0:
+        head_ref, base_ref, head_sha = _stack_refs(upstream)
+        if head_sha:
+            parent_sha = head_sha
+        elif head_ref:
+            parent = head_ref
+        if base_ref:
+            base = base_ref
+            meta["base"] = base
     commit_meta = commit_files_to_branch(
         files,
         branch=branch,
-        base=base,
+        base=parent,
         message=title if upstream <= 0 else f"{title} (from #{upstream})",
+        parent_sha=parent_sha,
     )
     existing = find_open_pr_for_head(branch)
     if existing:

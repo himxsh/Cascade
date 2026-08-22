@@ -322,7 +322,7 @@ def main() -> None:
     apply_p.add_argument(
         "--require-policy",
         action="store_true",
-        help="Exit non-zero if policy check fails (e.g. high severity without remediation PR)",
+        help="Exit non-zero if policy check fails (e.g. high severity stack without a PR)",
     )
     apply_p.set_defaults(func=cmd_apply)
 

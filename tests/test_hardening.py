@@ -20,8 +20,14 @@ GOLDEN_SQL = ROOT / "tests" / "golden" / "raw_orders_rename" / "expected_fct_ord
 
 
 class TestPolicy(unittest.TestCase):
-    def test_high_without_remediation_fails(self):
+    def test_high_without_stack_request_passes(self):
         result = evaluate_policy({"severity": "high"}, remediation_open=False)
+        self.assertTrue(result["ok"])
+
+    def test_high_stack_without_pr_fails(self):
+        result = evaluate_policy(
+            {"severity": "high"}, remediation_open=False, stack_requested=True
+        )
         self.assertFalse(result["ok"])
         self.assertEqual(result["code"], "high_without_remediation")
 
@@ -123,7 +129,7 @@ class TestApplyMode(unittest.TestCase):
             self.assertEqual(summary["mode"], "dry-run")
             self.assertTrue(summary["downstream_pr"]["dry_run"])
             self.assertTrue(summary["comment"]["dry_run"])
-            self.assertFalse(summary["policy"]["ok"])  # high + no remediation in dry-run
+            self.assertFalse(summary["policy"]["ok"])  # OPEN set, high, dry-run did not open
             self.assertTrue(Path(tmp, "apply_summary.json").is_file())
             self.assertTrue(Path(tmp, "cascade", "runs", "mode-test", "apply_summary.json").is_file())
 

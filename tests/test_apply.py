@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 from cascade.apply import remediations_to_files, run_apply
@@ -39,8 +40,20 @@ class TestComment(unittest.TestCase):
         self.assertIn("```mermaid", md)
         self.assertIn("user_id to customer_id", md)
         self.assertIn("retrain suggested", md)
+        self.assertIn("/cascade stack", md)
         with_url = build_pr_comment(report, remediation_pr_url="https://github.com/o/r/pull/9")
-        self.assertIn("**Remediation PR:** https://github.com/o/r/pull/9", with_url)
+        self.assertIn("**Stacked PR:** https://github.com/o/r/pull/9", with_url)
+
+    def test_clear_comment_when_no_downstream(self):
+        md = build_pr_comment({
+            "source_urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+            "changes": [{"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id"}],
+            "downstream": [],
+            "severity": "medium",
+        })
+        self.assertIn("No changes needed", md)
+        self.assertNotIn("/cascade stack", md)
+        self.assertNotIn("```mermaid", md)
 
     def test_remediation_pr_has_mermaid_not_diff(self):
         report = json.loads(GOLDEN_REPORT.read_text())
@@ -142,8 +155,15 @@ class TestGitHubAct(unittest.TestCase):
 
         calls: list[tuple[str, str]] = []
 
+        posted: dict[str, Any] = {}
+
         def fake_api(method: str, path: str, body=None):
             calls.append((method, path))
+            if method == "GET" and path == "/pulls/7":
+                return {
+                    "head": {"ref": "feat/rename", "sha": "abc123headsha"},
+                    "base": {"ref": "main"},
+                }
             if method == "GET" and path.startswith("/git/ref/heads/"):
                 if "cascade" in path:
                     raise RuntimeError("GitHub API GET failed: 404 not found")
@@ -161,6 +181,7 @@ class TestGitHubAct(unittest.TestCase):
             if method == "GET" and path.startswith("/pulls?"):
                 return []  # type: ignore[return-value]
             if method == "POST" and path == "/pulls":
+                posted["pull"] = body
                 return {"html_url": "https://github.com/o/r/pull/99", "number": 99}
             if method == "POST" and "requested_reviewers" in path:
                 return {"requested": True}
@@ -196,6 +217,10 @@ class TestGitHubAct(unittest.TestCase):
             self.assertEqual(result["branch"], "cascade/remediation/7")
             self.assertIn("cascade:source_urn=urn:li:dataset:x", body)
             self.assertTrue(any(m == "POST" and p == "/pulls" for m, p in calls))
+            self.assertTrue(any(m == "GET" and p == "/pulls/7" for m, p in calls))
+            self.assertEqual(posted["pull"]["base"], "main")
+            self.assertEqual(posted["pull"]["head"], "cascade/remediation/7")
+            self.assertTrue(any(p == "/git/commits/abc123headsha" for _, p in calls))
 
 
 class TestDataHubWrite(unittest.TestCase):

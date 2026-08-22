@@ -49,7 +49,6 @@ If you change impact, rewrite, or apply behavior, update the golden artifacts un
 | `examples/` | Sample diffs, models, and the consumer Action template |
 | `demo/fixtures/` | Offline catalog used by `--source fixture` |
 | `.github/workflows/` | CI plus this repo’s Cascade workflows |
-| `oss/datahub-skills/` | Draft DataHub skill (in-repo until upstream is coordinated) |
 | `frontend/` / `api/` | Optional local UI — not the install path |
 
 ## What to change
