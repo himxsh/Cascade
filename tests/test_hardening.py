@@ -98,6 +98,43 @@ class TestIdempotentComment(unittest.TestCase):
         self.assertTrue(result["updated"])
         self.assertTrue(any(m == "PATCH" for m, _ in calls))
 
+    def test_stack_comment_posts_new_when_impact_exists(self):
+        from cascade.comment import STACK_COMMENT_MARKER, build_stack_comment
+
+        calls: list[tuple[str, str]] = []
+
+        def fake_api(method: str, path: str, body=None):
+            calls.append((method, path))
+            if method == "POST" and path == "/issues/3/comments":
+                return {"id": 11, "html_url": "https://example/c/11"}
+            raise AssertionError(path)
+
+        def fake_list(method: str, path: str, body=None):
+            return [{
+                "id": 9,
+                "body": "## Cascade impact report\n\nold",
+                "html_url": "https://example/c/9",
+            }]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_TOKEN": "t", "GITHUB_REPOSITORY": "o/r"},
+                clear=False,
+            ):
+                with mock.patch("cascade.github_act._github_api", side_effect=fake_api):
+                    with mock.patch("cascade.github_act._github_api_list", side_effect=fake_list):
+                        result = post_pr_comment(
+                            build_stack_comment("https://github.com/o/r/pull/10"),
+                            pr_number=3,
+                            out_dir=tmp,
+                            marker=STACK_COMMENT_MARKER,
+                        )
+        self.assertTrue(result["posted"])
+        self.assertFalse(result["updated"])
+        self.assertTrue(any(m == "POST" and p == "/issues/3/comments" for m, p in calls))
+        self.assertFalse(any(m == "PATCH" for m, _ in calls))
+
 
 class TestApplyMode(unittest.TestCase):
     def setUp(self):

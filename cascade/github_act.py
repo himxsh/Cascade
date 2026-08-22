@@ -12,6 +12,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from cascade.comment import COMMENT_MARKER
+
 
 def _enc_ref(branch: str) -> str:
     """URL-encode branch names that contain '/' for Git refs API."""
@@ -64,16 +66,16 @@ def remediation_branch_name(upstream_pr: int | None) -> str:
     return "cascade/remediation/manual"
 
 
-COMMENT_MARKER = "## Cascade impact report"
-
-
-def find_cascade_comment(pr_number: int) -> dict[str, Any] | None:
-    """Return the most recent Cascade impact comment on the PR, if any."""
+def find_cascade_comment(
+    pr_number: int,
+    marker: str = COMMENT_MARKER,
+) -> dict[str, Any] | None:
+    """Return the most recent Cascade comment matching marker, if any."""
     comments = _github_api_list("GET", f"/issues/{pr_number}/comments?per_page=100")
     found: dict[str, Any] | None = None
     for c in comments:
         body = c.get("body") or ""
-        if body.startswith(COMMENT_MARKER):
+        if body.startswith(marker):
             found = c
     return found
 
@@ -92,8 +94,9 @@ def post_pr_comment(
     pr_number: int | None = None,
     out_dir: str | Path | None = None,
     force_dry_run: bool = False,
+    marker: str = COMMENT_MARKER,
 ) -> dict[str, Any]:
-    """Upsert Cascade comment when GITHUB_TOKEN exists; otherwise write artifact only."""
+    """Upsert Cascade comment matching marker; otherwise write artifact only."""
     if out_dir is not None:
         write_comment_artifact(out_dir, body)
 
@@ -105,7 +108,7 @@ def post_pr_comment(
     if number <= 0:
         return {"dry_run": False, "posted": False, "error": "no PR number"}
 
-    existing = find_cascade_comment(number)
+    existing = find_cascade_comment(number, marker=marker)
     if existing and existing.get("id"):
         result = _github_api("PATCH", f"/issues/comments/{existing['id']}", {"body": body})
         return {

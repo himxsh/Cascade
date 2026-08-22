@@ -11,7 +11,13 @@ from typing import Any
 from unittest import mock
 
 from cascade.apply import remediations_to_files, run_apply
-from cascade.comment import blast_mermaid, build_pr_comment, build_remediation_pr_body
+from cascade.comment import (
+    STACK_COMMENT_MARKER,
+    blast_mermaid,
+    build_pr_comment,
+    build_remediation_pr_body,
+    build_stack_comment,
+)
 from cascade.datahub_write import (
     TAG_BREAKING_PENDING,
     TAG_MIGRATED,
@@ -41,8 +47,11 @@ class TestComment(unittest.TestCase):
         self.assertIn("user_id to customer_id", md)
         self.assertIn("retrain suggested", md)
         self.assertIn("/cascade stack", md)
-        with_url = build_pr_comment(report, remediation_pr_url="https://github.com/o/r/pull/9")
-        self.assertIn("**Stacked PR:** https://github.com/o/r/pull/9", with_url)
+        self.assertNotIn("**Stacked PR:**", md)
+        stacked = build_stack_comment("https://github.com/o/r/pull/9")
+        self.assertIn("## Cascade stacked PR", stacked)
+        self.assertIn("**Stacked PR:** https://github.com/o/r/pull/9", stacked)
+        self.assertNotIn("Cascade impact report", stacked)
 
     def test_clear_comment_when_no_downstream(self):
         md = build_pr_comment({
@@ -326,6 +335,43 @@ class TestApply(unittest.TestCase):
             body = Path(tmp, "downstream_pr.md").read_text()
             self.assertIn("```mermaid", body)
             self.assertNotIn("```diff", body)
+
+    def test_stack_apply_posts_new_comment_not_impact(self):
+        report = json.loads(GOLDEN_REPORT.read_text())
+        report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
+        posted: dict[str, Any] = {}
+
+        def fake_post(body, **kwargs):
+            posted["body"] = body
+            posted["kwargs"] = kwargs
+            return {"posted": True, "updated": False, "dry_run": False}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {
+                **{k: v for k, v in os.environ.items() if k != "CASCADE_WRITEBACK"},
+                "GITHUB_TOKEN": "t",
+                "GITHUB_REPOSITORY": "o/r",
+                "CASCADE_OPEN_DOWNSTREAM_PR": "1",
+                "CASCADE_RUN_ID": "stack-comment-test",
+            }
+            with mock.patch.dict(os.environ, env, clear=True):
+                with mock.patch(
+                    "cascade.apply.open_or_update_downstream_pr",
+                    return_value={
+                        "dry_run": False,
+                        "opened": True,
+                        "url": "https://github.com/o/r/pull/10",
+                    },
+                ):
+                    with mock.patch("cascade.apply.post_pr_comment", side_effect=fake_post):
+                        summary = run_apply(
+                            report, out_dir=tmp, pr_number=9, mode="apply", audit_root=tmp
+                        )
+        self.assertIn("## Cascade stacked PR", posted["body"])
+        self.assertIn("**Stacked PR:** https://github.com/o/r/pull/10", posted["body"])
+        self.assertNotIn("Cascade impact report", posted["body"])
+        self.assertEqual(posted["kwargs"]["marker"], STACK_COMMENT_MARKER)
+        self.assertTrue(summary["policy"]["ok"])
 
     def test_remediations_to_files(self):
         files = remediations_to_files([

@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from cascade.audit import make_run_id, write_github_step_summary, write_run_audit
-from cascade.comment import build_pr_comment, build_remediation_pr_body, build_remediation_title
+from cascade.comment import (
+    STACK_COMMENT_MARKER,
+    build_pr_comment,
+    build_remediation_pr_body,
+    build_remediation_title,
+    build_stack_comment,
+)
 from cascade.datahub_write import mark_migrated, write_dataset_breaking, write_ml_retrain
 from cascade.github_act import (
     open_or_update_downstream_pr,
@@ -70,15 +76,31 @@ def run_apply(
 
     remediation_url = downstream_result.get("url") if not downstream_result.get("dry_run") else None
     remediation_open = bool(remediation_url) or bool(downstream_result.get("opened"))
-    comment = build_pr_comment(report, remediation_pr_url=remediation_url)
-    comment_result = post_pr_comment(
-        comment,
-        pr_number=pr_number,
-        out_dir=out,
-        force_dry_run=force_dry,
+    stack_requested = os.environ.get("CASCADE_OPEN_DOWNSTREAM_PR", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
     )
+    impact_comment = build_pr_comment(report)
+    if stack_requested and remediation_url:
+        comment = build_stack_comment(remediation_url)
+        comment_result = post_pr_comment(
+            comment,
+            pr_number=pr_number,
+            out_dir=out,
+            force_dry_run=force_dry,
+            marker=STACK_COMMENT_MARKER,
+        )
+    else:
+        comment = impact_comment
+        comment_result = post_pr_comment(
+            comment,
+            pr_number=pr_number,
+            out_dir=out,
+            force_dry_run=force_dry,
+        )
 
-    plan_doc = comment
+    plan_doc = impact_comment
     dh_result = write_dataset_breaking(
         source_urn,
         plan_doc=plan_doc,
@@ -105,11 +127,6 @@ def run_apply(
             dry_run=True if force_dry else None,
         )
 
-    stack_requested = os.environ.get("CASCADE_OPEN_DOWNSTREAM_PR", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-    )
     policy = evaluate_policy(
         report,
         remediation_open=remediation_open,

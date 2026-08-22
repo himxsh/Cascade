@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 COMMENT_MARKER = "## Cascade impact report"
+STACK_COMMENT_MARKER = "## Cascade stacked PR"
 STACK_COMMAND = "/cascade stack"
 _MAX_GRAPH_NODES = 15
 _ID_RE = re.compile(r"[^A-Za-z0-9_]")
@@ -120,11 +121,17 @@ def _has_rewrite_files(report: dict[str, Any]) -> bool:
     return any(r.get("path") and r.get("rewritten_sql") for r in report.get("remediations") or [])
 
 
-def build_pr_comment(
-    report: dict[str, Any],
-    *,
-    remediation_pr_url: str | None = None,
-) -> str:
+def build_stack_comment(remediation_pr_url: str) -> str:
+    """New comment after `/cascade stack` — does not edit the impact report."""
+    return "\n".join([
+        STACK_COMMENT_MARKER,
+        "",
+        f"**Stacked PR:** {remediation_pr_url}",
+        "",
+    ])
+
+
+def build_pr_comment(report: dict[str, Any]) -> str:
     """Short comment on the source PR: clear, or blast radius + stack option."""
     source = _short_name(str(report.get("source_urn") or "unknown"))
     severity = report.get("severity", "unknown")
@@ -155,10 +162,7 @@ def build_pr_comment(
     graph = blast_mermaid(report)
     if graph:
         lines.extend(["```mermaid", graph, "```", ""])
-    if remediation_pr_url:
-        lines.append(f"**Stacked PR:** {remediation_pr_url}")
-        lines.append("")
-    elif _has_rewrite_files(report):
+    if _has_rewrite_files(report):
         lines.append(
             f"Comment `{STACK_COMMAND}` to open a stacked PR with this branch's "
             "commits plus the downstream rewrites."
