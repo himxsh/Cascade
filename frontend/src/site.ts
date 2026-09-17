@@ -1,34 +1,10 @@
 import Lenis from 'lenis'
 
 export const GITHUB = 'https://github.com/himxsh/Cascade'
-export const ACTION_FILE =
-  'https://github.com/himxsh/Cascade/blob/main/examples/github-action/cascade.yml'
 export const LICENSE = 'https://github.com/himxsh/Cascade/blob/main/LICENSE'
 
-export const NPX = 'npx create-cascade@latest'
 export const PIP =
-  'pip install "cascade-agent @ git+https://github.com/himxsh/Cascade.git"'
-export const GH_CURL =
-  'mkdir -p .github/workflows && curl -fsSL https://raw.githubusercontent.com/himxsh/Cascade/main/examples/github-action/cascade.yml -o .github/workflows/cascade.yml'
-
-export const WORKFLOW_HREF = '/cascade.yml'
-
-export type InstallTab = 'npx' | 'pip' | 'github'
-
-export function installCopy(tab: InstallTab): string {
-  switch (tab) {
-    case 'npx':
-      return NPX
-    case 'pip':
-      return PIP
-    case 'github':
-      return GH_CURL
-    default: {
-      const _never: never = tab
-      return _never
-    }
-  }
-}
+  'pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"'
 
 export async function copyText(text: string): Promise<boolean> {
   try {

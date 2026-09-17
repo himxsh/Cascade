@@ -5,7 +5,7 @@
 It does not connect to your warehouse. It does not merge without a human. It coordinates the work that usually lives in Slack threads and stale tickets.
 
 ```text
-pip install "cascade-agent @ git+https://github.com/himxsh/Cascade.git"
+pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"
 cascade init
 ```
 
@@ -88,7 +88,7 @@ Warehouses (Snowflake, Postgres, BigQuery, …) work insofar as DataHub already 
 ## Install
 
 ```bash
-pip install "cascade-agent @ git+https://github.com/himxsh/Cascade.git"
+pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"
 cascade --help
 ```
 

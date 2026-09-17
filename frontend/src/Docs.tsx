@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { GhCode } from './Gh'
 import { Link } from './Link'
-import { GH_CURL, GITHUB, NPX, PIP } from './site'
+import { GITHUB, PIP } from './site'
 
 export const DOC_IDS = [
   'get-started',
@@ -62,7 +62,7 @@ function DocBody({ id }: { id: DocId }) {
           <ol className="mt-8 max-w-[65ch] space-y-6">
             <li>
               <p className="font-semibold">Install it</p>
-              <GhCode file="terminal">{`${NPX}\n# or\n${PIP}`}</GhCode>
+              <GhCode file="terminal">{PIP}</GhCode>
             </li>
             <li>
               <p className="font-semibold">Create the config files</p>
@@ -97,26 +97,18 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>Install</H>
           <P>
-            Cascade itself is Python. The npm command only sets up files. It
-            does not rewrite SQL in Node.
+            Cascade is Python. You need 3.11 or newer. This installs the
+            cascade command.
           </P>
-          <h2 className="mt-10 text-xl font-semibold">npx</h2>
-          <GhCode file="terminal">{NPX}</GhCode>
-          <P>
-            Checks for Python 3.11 or newer, installs Cascade, and adds the
-            config, example secrets file, and GitHub workflow.
-          </P>
-          <h2 className="mt-10 text-xl font-semibold">pip</h2>
           <GhCode file="terminal">{PIP}</GhCode>
           <P>
-            This installs the cascade command. In GitHub Actions, pin a version.
-            Do not install from main.
+            Then run cascade init in your repo. That writes the config, an
+            example secrets file, and the GitHub workflow. In GitHub Actions,
+            pin a version. Do not install from main.
           </P>
-          <h2 className="mt-10 text-xl font-semibold">GitHub Action</h2>
-          <GhCode file="terminal">{GH_CURL}</GhCode>
           <P>
-            Or download the workflow from the homepage. Only add writeback if
-            you want Cascade to leave a note on the table in DataHub.
+            Only add writeback if you want Cascade to leave a note on the table
+            in DataHub.
           </P>
           <p className="mt-6">
             <Link href={GITHUB} className="text-frost underline decoration-ember/70 underline-offset-4">
@@ -193,7 +185,9 @@ LLM_MODEL=`}</GhCode>
             Required secrets: DATAHUB_GMS_URL, DATAHUB_TOKEN. Optional:
             LLM_API_KEY. Pin the install to a version, not main.
           </P>
-          <GhCode file="terminal">{GH_CURL}</GhCode>
+          <P>
+            cascade init writes the workflow file. You can also download it.
+          </P>
           <p className="mt-6">
             <Link href="/cascade.yml" download="cascade.yml" className="btn btn-ember">
               Download workflow
