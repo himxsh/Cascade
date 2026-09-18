@@ -12,7 +12,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from cascade.comment import COMMENT_MARKER
+from cascade.comment import COMMENT_MARKER, comment_matches_marker
 
 
 def _enc_ref(branch: str) -> str:
@@ -75,7 +75,7 @@ def find_cascade_comment(
     found: dict[str, Any] | None = None
     for c in comments:
         body = c.get("body") or ""
-        if body.startswith(marker):
+        if comment_matches_marker(body, marker):
             found = c
     return found
 
@@ -339,7 +339,8 @@ def open_or_update_downstream_pr(
         marker = f"\n<!-- cascade:source_urn={source_urn} -->\n"
     pr_md_parts: list[str] = []
     stripped = body.strip()
-    if stripped and not stripped.startswith("#"):
+    has_h1 = any(line.startswith("# ") for line in stripped.splitlines())
+    if stripped and not has_h1:
         pr_md_parts.extend([f"# {title}", "", stripped])
     elif stripped:
         pr_md_parts.append(stripped)

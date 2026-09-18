@@ -11,8 +11,30 @@ from typing import Any
 COMMENT_MARKER = "## Cascade impact report"
 STACK_COMMENT_MARKER = "## Cascade stacked PR"
 STACK_COMMAND = "/cascade stack"
+# Icon already served on the marketing site (180×180 PNG). The 2000×2000
+# wordmark at frontend/public/logo.png would dominate a GitHub thread.
+COMMENT_LOGO_URL = "https://cascade-sigma-three.vercel.app/apple-touch-icon.png"
+COMMENT_LOGO_HTML = (
+    f'<img src="{COMMENT_LOGO_URL}" width="32" height="32" alt="Cascade">'
+)
 _MAX_GRAPH_NODES = 15
 _ID_RE = re.compile(r"[^A-Za-z0-9_]")
+
+
+def branded_markdown(body: str) -> str:
+    """Prefix GitHub markdown with a sized Cascade icon (HTML img)."""
+    text = (body or "").lstrip("\n")
+    if text.startswith(COMMENT_LOGO_HTML):
+        return text
+    if not text:
+        return COMMENT_LOGO_HTML + "\n"
+    return f"{COMMENT_LOGO_HTML}\n\n{text}"
+
+
+def comment_matches_marker(body: str, marker: str) -> bool:
+    """True if body is a Cascade comment for marker, with or without the logo prefix."""
+    text = body or ""
+    return text.startswith(marker) or f"\n{marker}" in text
 
 
 def _short_name(urn_or_path: str) -> str:
@@ -123,12 +145,12 @@ def _has_rewrite_files(report: dict[str, Any]) -> bool:
 
 def build_stack_comment(remediation_pr_url: str) -> str:
     """New comment after `/cascade stack` — does not edit the impact report."""
-    return "\n".join([
+    return branded_markdown("\n".join([
         STACK_COMMENT_MARKER,
         "",
         f"**Stacked PR:** {remediation_pr_url}",
         "",
-    ])
+    ]))
 
 
 def build_pr_comment(report: dict[str, Any]) -> str:
@@ -141,7 +163,7 @@ def build_pr_comment(report: dict[str, Any]) -> str:
     agent = _agent_label(remediations)
     source_line = f"**Source:** `{report.get('source_urn', '(unknown)')}`"
     if n == 0:
-        return "\n".join([
+        return branded_markdown("\n".join([
             COMMENT_MARKER,
             "",
             "**No changes needed.** No downstream models depend on this schema change.",
@@ -150,7 +172,7 @@ def build_pr_comment(report: dict[str, Any]) -> str:
             "",
             source_line,
             "",
-        ])
+        ]))
     lines = [
         COMMENT_MARKER,
         "",
@@ -176,7 +198,7 @@ def build_pr_comment(report: dict[str, Any]) -> str:
         lines.append("")
     lines.append(source_line)
     lines.append("")
-    return "\n".join(lines)
+    return branded_markdown("\n".join(lines))
 
 
 def build_remediation_pr_body(report: dict[str, Any]) -> str:
@@ -251,4 +273,4 @@ def build_remediation_pr_body(report: dict[str, Any]) -> str:
             f"- ML `{m.get('model_urn')}` via `{m.get('via_feature')}` → `{m.get('action')}`"
         )
     lines.extend(["", "</details>", ""])
-    return "\n".join(lines)
+    return branded_markdown("\n".join(lines))

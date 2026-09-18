@@ -12,11 +12,17 @@ from unittest import mock
 
 from cascade.apply import remediations_to_files, run_apply
 from cascade.comment import (
+    COMMENT_LOGO_HTML,
+    COMMENT_LOGO_URL,
+    COMMENT_MARKER,
     STACK_COMMENT_MARKER,
     blast_mermaid,
+    branded_markdown,
     build_pr_comment,
     build_remediation_pr_body,
+    build_remediation_title,
     build_stack_comment,
+    comment_matches_marker,
 )
 from cascade.datahub_write import (
     TAG_BREAKING_PENDING,
@@ -42,6 +48,10 @@ class TestComment(unittest.TestCase):
         report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
         md = build_pr_comment(report)
         self.assertIn("Cascade impact report", md)
+        self.assertTrue(md.startswith(COMMENT_LOGO_HTML))
+        self.assertIn(COMMENT_LOGO_URL, md)
+        self.assertIn('width="32"', md)
+        self.assertIn('height="32"', md)
         self.assertIn("fct_orders", md)
         self.assertIn("```mermaid", md)
         self.assertIn("user_id to customer_id", md)
@@ -49,6 +59,7 @@ class TestComment(unittest.TestCase):
         self.assertIn("/cascade stack", md)
         self.assertNotIn("**Stacked PR:**", md)
         stacked = build_stack_comment("https://github.com/o/r/pull/9")
+        self.assertTrue(stacked.startswith(COMMENT_LOGO_HTML))
         self.assertIn("## Cascade stacked PR", stacked)
         self.assertIn("**Stacked PR:** https://github.com/o/r/pull/9", stacked)
         self.assertNotIn("Cascade impact report", stacked)
@@ -60,15 +71,25 @@ class TestComment(unittest.TestCase):
             "downstream": [],
             "severity": "medium",
         })
+        self.assertTrue(md.startswith(COMMENT_LOGO_HTML))
         self.assertIn("No changes needed", md)
         self.assertNotIn("/cascade stack", md)
         self.assertNotIn("```mermaid", md)
+
+    def test_branded_markdown_is_idempotent(self):
+        once = branded_markdown("## heading\n")
+        self.assertEqual(once, branded_markdown(once))
+        self.assertTrue(comment_matches_marker(once, "## heading"))
+        self.assertTrue(comment_matches_marker(COMMENT_MARKER + "\n\nold", COMMENT_MARKER))
+        self.assertFalse(comment_matches_marker("unrelated", COMMENT_MARKER))
 
     def test_remediation_pr_has_mermaid_not_diff(self):
         report = json.loads(GOLDEN_REPORT.read_text())
         report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
         report["remediations"][1]["agent"] = "deterministic"
         md = build_remediation_pr_body(report)
+        self.assertTrue(md.startswith(COMMENT_LOGO_HTML))
+        self.assertIn(COMMENT_LOGO_URL, md)
         self.assertIn("```mermaid", md)
         self.assertIn("What could break", md)
         self.assertIn("How Cascade fixed it", md)
@@ -140,6 +161,24 @@ class TestGitHubAct(unittest.TestCase):
             body = Path(tmp, "downstream_pr.md").read_text()
             self.assertNotIn("@alice", body)
             self.assertNotIn("Suggested reviewers", body)
+
+    def test_branded_remediation_body_not_wrapped_in_second_title(self):
+        report = json.loads(GOLDEN_REPORT.read_text())
+        report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
+        md = build_remediation_pr_body(report)
+        title = build_remediation_title(report)
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}
+            with mock.patch.dict(os.environ, env, clear=True):
+                open_or_update_downstream_pr(
+                    {"examples/models/fct_orders.sql": GOLDEN_SQL.read_text()},
+                    title=title,
+                    body=md,
+                    out_dir=tmp,
+                )
+            written = Path(tmp, "downstream_pr.md").read_text()
+        self.assertTrue(written.startswith(COMMENT_LOGO_HTML))
+        self.assertEqual(written.count(f"# {title}"), 1)
 
     def test_owner_urns_to_reviewers(self):
         from cascade.github_act import owner_urns_to_reviewers
@@ -336,6 +375,10 @@ class TestApply(unittest.TestCase):
             body = Path(tmp, "downstream_pr.md").read_text()
             self.assertIn("```mermaid", body)
             self.assertNotIn("```diff", body)
+            comment_md = Path(tmp, "pr_comment.md").read_text()
+            self.assertIn(COMMENT_LOGO_URL, comment_md)
+            self.assertIn(COMMENT_LOGO_HTML, comment_md)
+            self.assertIn(COMMENT_LOGO_URL, body)
 
     def test_stack_apply_posts_new_comment_not_impact(self):
         report = json.loads(GOLDEN_REPORT.read_text())
@@ -369,6 +412,7 @@ class TestApply(unittest.TestCase):
                             report, out_dir=tmp, pr_number=9, mode="apply", audit_root=tmp
                         )
         self.assertIn("## Cascade stacked PR", posted["body"])
+        self.assertTrue(posted["body"].startswith(COMMENT_LOGO_HTML))
         self.assertIn("**Stacked PR:** https://github.com/o/r/pull/10", posted["body"])
         self.assertNotIn("Cascade impact report", posted["body"])
         self.assertEqual(posted["kwargs"]["marker"], STACK_COMMENT_MARKER)
