@@ -13,7 +13,7 @@ git clone https://github.com/himxsh/Cascade.git
 cd Cascade
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,ui]"
 cascade --help
 ```
 
@@ -35,6 +35,8 @@ CI runs this, and so should you before a PR:
 python -m unittest discover -s tests -v
 ```
 
+Dashboard/API tests need the `[ui]` extra (FastAPI). Engine tests do not. CI installs `.[ui]`.
+
 The default path is **fixture + deterministic rewrite**. Tests must stay green with no `DATAHUB_GMS_URL`, no GitHub token, and no LLM key.
 
 If you change impact, rewrite, or apply behavior, update the golden artifacts under `tests/golden/` and `examples/rewritten/` in the same PR. Do not weaken a golden test to make a refactor pass.
@@ -49,7 +51,7 @@ If you change impact, rewrite, or apply behavior, update the golden artifacts un
 | `examples/` | Sample diffs, models, and the consumer Action template |
 | `demo/fixtures/` | Offline catalog used by `--source fixture` |
 | `.github/workflows/` | CI plus this repo’s Cascade workflows |
-| `frontend/` / `api/` | Optional local UI — not the install path |
+| `frontend/` / `api/` | Optional local UI and hosted dashboard — not the CLI install path |
 
 ## What to change
 

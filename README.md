@@ -256,6 +256,9 @@ A key in the environment does **not** turn LLM on. Mode must be `llm`.
 | `CASCADE_WRITEBACK=1`                                      | Live DataHub/ML tags (never on untrusted CI) |
 | `GITHUB_TOKEN` / `GITHUB_REPOSITORY` / `CASCADE_PR_NUMBER` | Live PR comment (Action sets these)          |
 | `CASCADE_OPEN_DOWNSTREAM_PR=1`                             | Open stacked PR (`/cascade stack` sets this) |
+| `DATABASE_URL` / `SESSION_SECRET` / `GITHUB_OAUTH_*`       | Hosted dashboard only (not the CLI)          |
+| `CASCADE_DEV_LOGIN=1`                                      | Local dashboard test login (never production)|
+| `GITHUB_APP_ID` / `GITHUB_APP_SLUG` / `GITHUB_WEBHOOK_SECRET` | GitHub App (when registered)              |
 
 
 See `.env.example`. Actions secrets override `.env`. There are no warehouse credentials in this contract.
@@ -277,16 +280,21 @@ Dialect-specific quoting (BigQuery backticks, Snowflake `QUALIFY`, mixed-case Po
 
 ## Optional local UI
 
-Paste a schema diff, run the fixture path, inspect blast radius and SQL diffs:
+Marketing site plus a GitHub sign-in dashboard for enabling repos:
 
 ```bash
 pip install -e ".[ui]"
+cp .env.example .env
+# Local harness so the dashboard works without a GitHub OAuth App:
+#   CASCADE_DEV_LOGIN=1
+#   SESSION_SECRET=dev-insecure
+#   DATABASE_URL=sqlite:///./cascade.db
 uvicorn api.server:app --reload --port 8000
 # in another terminal:
 cd frontend && npm install && npm run dev
 ```
 
-[http://localhost:5173](http://localhost:5173) → **Load demo diff** → **Run Cascade**.
+[http://localhost:5173](http://localhost:5173) — marketing at `/`, then **Sign in** → `/app`. `POST /api/run` and `GET /api/health` still work. Webhooks: `POST /api/github/webhook` (HMAC). App comments are not live until GitHub App secrets exist; see [plan.md](plan.md) and Docs → GitHub App.
 
 ## Limitations
 

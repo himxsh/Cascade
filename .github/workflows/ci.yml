@@ -14,6 +14,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install
-        run: pip install -e .
+        run: pip install -e ".[ui]"
       - name: Unit tests + golden-diff eval
         run: python -m unittest discover -s tests -v

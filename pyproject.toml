@@ -10,7 +10,7 @@ description = "An agent that turns a breaking schema PR into a coordinated migra
 license = { text = "Apache-2.0" }
 
 [tool.setuptools]
-packages = ["cascade"]
+packages = ["cascade", "api"]
 
 [tool.setuptools.package-data]
 cascade = ["prompts/*.md", "templates/*"]
@@ -20,7 +20,7 @@ cascade = "cascade.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest"]
-ui = ["fastapi>=0.115", "uvicorn[standard]>=0.32"]
+ui = ["fastapi>=0.115", "uvicorn[standard]>=0.32", "httpx>=0.27"]
 writeback = ["acryl-datahub"]
 
 [tool.vercel]

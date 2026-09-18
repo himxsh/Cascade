@@ -8,6 +8,7 @@ export const DOC_IDS = [
   'install',
   'configure',
   'environment',
+  'github-app',
   'action',
   'rewrite',
   'providers',
@@ -23,6 +24,7 @@ const NAV: { id: DocId; label: string }[] = [
   { id: 'install', label: 'Install' },
   { id: 'configure', label: 'Configure' },
   { id: 'environment', label: 'Secrets' },
+  { id: 'github-app', label: 'GitHub App' },
   { id: 'action', label: 'GitHub Action' },
   { id: 'rewrite', label: 'How it edits' },
   { id: 'providers', label: 'AI models' },
@@ -162,9 +164,53 @@ CASCADE_LLM_PROVIDER=openai
 LLM_API_KEY=
 LLM_MODEL=`}</GhCode>
           <P>
-            GitHub fills in GITHUB_TOKEN for you. You do not need a database
-            password. There is no DATABASE_URL.
+            GitHub fills in GITHUB_TOKEN for the Action. You do not need a
+            database password. The CLI does not use DATABASE_URL. The hosted
+            dashboard does (SQLite locally; see GitHub App).
           </P>
+        </>
+      )
+    case 'github-app':
+      return (
+        <>
+          <H>GitHub App (when ready)</H>
+          <P>
+            The product path is: sign in with GitHub on this site, install the
+            Cascade GitHub App, enable repos in the dashboard, then Cascade
+            comments on pull requests as the App. Creating the App on github.com
+            is not done in this repo — do that on your laptop, then put secrets
+            in server env only. Never put the App private key in the frontend.
+          </P>
+          <P>
+            Until those secrets exist, the dashboard still works: sign in with
+            OAuth, or set CASCADE_DEV_LOGIN=1 for a local test session. Repo
+            enable/disable is stored in SQLite. Webhooks verify HMAC and log
+            events; they do not yet mint an installation token or comment.
+          </P>
+          <GhCode file=".env.example">{`# Hosted dashboard (not the CLI)
+DATABASE_URL=sqlite:///./cascade.db
+SESSION_SECRET=
+CASCADE_DEV_LOGIN=1
+
+# GitHub OAuth (Sign in)
+GITHUB_OAUTH_CLIENT_ID=
+GITHUB_OAUTH_CLIENT_SECRET=
+
+# GitHub App (create on github.com when ready)
+GITHUB_APP_ID=
+GITHUB_APP_SLUG=cascade
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_WEBHOOK_SECRET=`}</GhCode>
+          <P>
+            App setup callback: /api/github/setup. Webhook: POST
+            /api/github/webhook. Workers only process repos you enable. The
+            GitHub Action path stays available for self-hosted installs.
+          </P>
+          <p className="mt-6">
+            <Link href="/app" className="btn btn-ember">
+              Open the dashboard
+            </Link>
+          </p>
         </>
       )
     case 'action':
@@ -306,7 +352,11 @@ LLM_MODEL=`}</GhCode>
           </P>
           <h2 className="mt-8 text-xl font-semibold">Is this a hosted product?</h2>
           <P>
-            No. There is no signup. Install the package or add the GitHub Action.
+            The CLI and GitHub Action remain the open-source install path. This
+            site also has a GitHub sign-in dashboard for enabling repos. App
+            comments (logo avatar) wait until the GitHub App is registered and
+            secrets are set. There is still no warehouse signup and no merge
+            without you.
           </P>
         </>
       )

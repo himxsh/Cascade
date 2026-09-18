@@ -41,11 +41,14 @@ export function go(href: string): void {
   const url = new URL(href, window.location.origin)
   const next = url.pathname.replace(/\/+$/, '') || '/'
   const hash = url.hash
-  if (pathOf() !== next) {
-    history.pushState(null, '', next + hash)
+  const search = url.search
+  const dest = next + search + hash
+  const same = pathOf() === next && window.location.search === search
+  if (!same) {
+    history.pushState(null, '', dest)
     window.dispatchEvent(new PopStateEvent('popstate'))
   } else if (hash) {
-    history.pushState(null, '', next + hash)
+    history.pushState(null, '', dest)
   }
   if (hash) lenis.scrollTo(hash)
   else lenis.scrollTo(0, { immediate: true })

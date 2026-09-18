@@ -19,6 +19,9 @@ api/static/
 video/
 docs/
 .freebuff/
+*.db
+*.db-wal
+*.db-shm
 
 # Local teaching workspace (not part of the product)
 MISSION.md

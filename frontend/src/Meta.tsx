@@ -9,6 +9,13 @@ export function Changelog() {
         release. Pin a version in GitHub Actions.
       </p>
       <section className="mt-12">
+        <h2 className="text-xl font-semibold">Unreleased</h2>
+        <ul className="mt-4 space-y-2 text-mute">
+          <li>GitHub sign-in and an auth-gated dashboard to enable repos.</li>
+          <li>Webhook receiver with HMAC verification (no live App comments yet).</li>
+        </ul>
+      </section>
+      <section className="mt-12">
         <h2 className="text-xl font-semibold">0.1.0</h2>
         <ul className="mt-4 space-y-2 text-mute">
           <li>Commands: impact, generate, apply, policy, init, doctor, demo.</li>
@@ -39,6 +46,8 @@ export function Security() {
       <p className="mt-3 text-mute">
         DataHub and AI keys stay in your GitHub secrets and local .env. cascade
         init only writes an example file. AI edits cannot invent column names.
+        The GitHub App private key, OAuth client secret, webhook secret, and
+        SESSION_SECRET stay on the server. They are never sent to the browser.
       </p>
       <h2 className="mt-10 text-xl font-semibold">What we do not do</h2>
       <p className="mt-3 text-mute">
