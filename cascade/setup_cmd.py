@@ -35,6 +35,7 @@ def run_init(root: Path | None = None, *, force: bool = False) -> list[str]:
         ),
         "Next: copy .env.example → .env, fill DATAHUB_GMS_URL, map URNs in .cascade/config.json",
         "Add the same DataHub keys as GitHub Actions secrets. Do not commit .env.",
+        "Optional: GitHub App CASCADE_GITHUB_APP_ID so PR comments use the Cascade logo as the bot avatar.",
     ]
     gitignore = root / ".gitignore"
     if gitignore.is_file():

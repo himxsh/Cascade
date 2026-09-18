@@ -32,8 +32,10 @@ export function Security() {
       <h2 className="mt-10 text-xl font-semibold">What the Action can do</h2>
       <p className="mt-3 text-mute">
         It can comment on a pull request. A stacked PR opens only if someone
-        comments /cascade stack. It cannot merge. It uses the default GitHub
-        token, not a stored personal token.
+        comments /cascade stack. It cannot merge. By default it uses the
+        GitHub Actions token (github-actions[bot]). To show the Cascade logo
+        as the comment avatar, install a GitHub App and upload the logo in
+        the App settings — the comment body does not set that picture.
       </p>
       <h2 className="mt-10 text-xl font-semibold">Secrets</h2>
       <p className="mt-3 text-mute">

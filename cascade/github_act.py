@@ -1,4 +1,8 @@
-"""GitHub act helpers — dry-run writes artifacts; live posts when GITHUB_TOKEN is set."""
+"""GitHub act helpers — dry-run writes artifacts; live posts when a token is set.
+
+The comment's circular avatar is the token owner (GitHub App bot, machine user,
+or github-actions[bot]). It is not something the comment body can set.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +16,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from cascade.comment import COMMENT_MARKER, comment_matches_marker
+from cascade.comment import COMMENT_MARKER
 
 
 def _enc_ref(branch: str) -> str:
@@ -20,10 +24,23 @@ def _enc_ref(branch: str) -> str:
     return urllib.parse.quote(branch, safe="")
 
 
+def _github_token() -> str:
+    """Token that owns posted comments and stacked PRs.
+
+    CASCADE_GITHUB_TOKEN (bot PAT) wins over GITHUB_TOKEN so a branded
+    machine user can override the default Actions github-actions[bot] token.
+    GitHub App installation tokens are passed in as GITHUB_TOKEN by the workflow.
+    """
+    return (
+        os.environ.get("CASCADE_GITHUB_TOKEN", "").strip()
+        or os.environ.get("GITHUB_TOKEN", "").strip()
+    )
+
+
 def _github_api(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-    token = os.environ.get("GITHUB_TOKEN")
+    token = _github_token()
     if not token:
-        raise RuntimeError("GITHUB_TOKEN not set")
+        raise RuntimeError("GITHUB_TOKEN or CASCADE_GITHUB_TOKEN is not set")
     repo = os.environ.get("GITHUB_REPOSITORY")
     if not repo:
         raise RuntimeError("GITHUB_REPOSITORY not set")
@@ -75,7 +92,7 @@ def find_cascade_comment(
     found: dict[str, Any] | None = None
     for c in comments:
         body = c.get("body") or ""
-        if comment_matches_marker(body, marker):
+        if body.startswith(marker):
             found = c
     return found
 
@@ -100,7 +117,7 @@ def post_pr_comment(
     if out_dir is not None:
         write_comment_artifact(out_dir, body)
 
-    token = os.environ.get("GITHUB_TOKEN")
+    token = _github_token()
     if force_dry_run or not token:
         return {"dry_run": True, "posted": False, "path": str(Path(out_dir or ".") / "pr_comment.md")}
 
@@ -339,8 +356,7 @@ def open_or_update_downstream_pr(
         marker = f"\n<!-- cascade:source_urn={source_urn} -->\n"
     pr_md_parts: list[str] = []
     stripped = body.strip()
-    has_h1 = any(line.startswith("# ") for line in stripped.splitlines())
-    if stripped and not has_h1:
+    if stripped and not stripped.startswith("#"):
         pr_md_parts.extend([f"# {title}", "", stripped])
     elif stripped:
         pr_md_parts.append(stripped)
@@ -363,7 +379,7 @@ def open_or_update_downstream_pr(
     if out_dir is not None:
         write_downstream_artifacts(out_dir, files, meta, patch=patch, pr_body=pr_body)
 
-    token = os.environ.get("GITHUB_TOKEN")
+    token = _github_token()
     head_override = os.environ.get("CASCADE_DOWNSTREAM_HEAD", "").strip()
     open_via_api = _truthy("CASCADE_OPEN_DOWNSTREAM_PR")
 

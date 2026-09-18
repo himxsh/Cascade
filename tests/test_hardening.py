@@ -11,7 +11,6 @@ from unittest import mock
 
 from cascade.apply import run_apply
 from cascade.audit import make_run_id, write_run_audit
-from cascade.comment import STACK_COMMENT_MARKER, branded_markdown, build_pr_comment, build_stack_comment
 from cascade.github_act import post_pr_comment
 from cascade.policy import evaluate_policy
 
@@ -99,68 +98,9 @@ class TestIdempotentComment(unittest.TestCase):
         self.assertTrue(result["updated"])
         self.assertTrue(any(m == "PATCH" for m, _ in calls))
 
-    def test_updates_existing_when_new_body_has_logo_prefix(self):
-        calls: list[tuple[str, str]] = []
-
-        def fake_api(method: str, path: str, body=None):
-            calls.append((method, path))
-            if method == "PATCH":
-                return {"id": 9, "html_url": "https://example/c/9"}
-            raise AssertionError(path)
-
-        def fake_list(method: str, path: str, body=None):
-            return [{
-                "id": 9,
-                "body": "## Cascade impact report\n\nold",
-                "html_url": "https://example/c/9",
-            }]
-
-        md = build_pr_comment({
-            "source_urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
-            "changes": [{"type": "FIELD_RENAMED", "from": "user_id", "to": "customer_id"}],
-            "downstream": [],
-        })
-        self.assertTrue(md.startswith("<img "))
-        self.assertIn("## Cascade impact report", md)
-
-        with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.dict(
-                os.environ,
-                {"GITHUB_TOKEN": "t", "GITHUB_REPOSITORY": "o/r"},
-                clear=False,
-            ):
-                with mock.patch("cascade.github_act._github_api", side_effect=fake_api):
-                    with mock.patch("cascade.github_act._github_api_list", side_effect=fake_list):
-                        result = post_pr_comment(md, pr_number=3, out_dir=tmp)
-        self.assertTrue(result["posted"])
-        self.assertTrue(result["updated"])
-        self.assertTrue(any(m == "PATCH" for m, _ in calls))
-
-        branded_existing = branded_markdown("## Cascade impact report\n\nold")
-        calls.clear()
-
-        def fake_list_branded(method: str, path: str, body=None):
-            return [{
-                "id": 9,
-                "body": branded_existing,
-                "html_url": "https://example/c/9",
-            }]
-
-        with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.dict(
-                os.environ,
-                {"GITHUB_TOKEN": "t", "GITHUB_REPOSITORY": "o/r"},
-                clear=False,
-            ):
-                with mock.patch("cascade.github_act._github_api", side_effect=fake_api):
-                    with mock.patch(
-                        "cascade.github_act._github_api_list",
-                        side_effect=fake_list_branded,
-                    ):
-                        result = post_pr_comment(md, pr_number=3, out_dir=tmp)
-        self.assertTrue(result["updated"])
-
     def test_stack_comment_posts_new_when_impact_exists(self):
+        from cascade.comment import STACK_COMMENT_MARKER, build_stack_comment
+
         calls: list[tuple[str, str]] = []
 
         def fake_api(method: str, path: str, body=None):

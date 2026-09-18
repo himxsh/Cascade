@@ -26,7 +26,7 @@ class TestDemo(unittest.TestCase):
             env = {
                 k: v
                 for k, v in os.environ.items()
-                if k not in ("GITHUB_TOKEN", "CASCADE_WRITEBACK", "CASCADE_DOWNSTREAM_HEAD")
+                if k not in ("GITHUB_TOKEN", "CASCADE_GITHUB_TOKEN", "CASCADE_WRITEBACK", "CASCADE_DOWNSTREAM_HEAD")
             }
             with mock.patch.dict(os.environ, env, clear=True):
                 result = run_demo(out_dir=tmp)

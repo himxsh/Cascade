@@ -56,10 +56,20 @@ jobs:
         run: |
           pip install "cascade-bot[writeback] @ git+https://github.com/himxsh/Cascade.git@74e491aa6f8c689faa56ad5439f3a254a8ab3d72"
 
+      # Comment identity (circular avatar in the PR thread):
+      # GitHub App → CASCADE_GITHUB_TOKEN (machine user) → github-actions[bot].
+      # The App logo / user profile picture is set in GitHub, not in the comment body.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: cascade-app-token
+        if: ${{ vars.CASCADE_GITHUB_APP_ID != '' && secrets.CASCADE_GITHUB_APP_PRIVATE_KEY != '' }}
+        with:
+          app-id: ${{ vars.CASCADE_GITHUB_APP_ID }}
+          private-key: ${{ secrets.CASCADE_GITHUB_APP_PRIVATE_KEY }}
+
       - name: Resolve PR
         id: pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.cascade-app-token.outputs.token || secrets.CASCADE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           if [ "${GITHUB_EVENT_NAME}" = "issue_comment" ]; then
             N="${{ github.event.issue.number }}"
@@ -124,7 +134,7 @@ jobs:
       - name: Apply (comment, or stacked PR on /cascade stack)
         if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.empty != 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.cascade-app-token.outputs.token || secrets.CASCADE_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           CASCADE_PR_NUMBER: ${{ steps.pr.outputs.number }}
           CASCADE_OPEN_DOWNSTREAM_PR: ${{ github.event_name == 'issue_comment' && '1' || '' }}

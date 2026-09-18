@@ -201,6 +201,43 @@ This repo’s own workflows also keep an offline **fixture-ci** job. Consumer te
 
 On merge of `cascade/remediation/*`, `[.github/workflows/cascade-migrated.yml](.github/workflows/cascade-migrated.yml)` can call `mark_migrated`.
 
+### Comment avatar (GitHub identity)
+
+The circular picture next to Cascade comments is **the token owner**, not an image in the markdown. The Issues Comments API cannot set that avatar.
+
+Default `secrets.GITHUB_TOKEN` always posts as **github-actions[bot]** with GitHub’s Actions avatar. That picture is not configurable.
+
+To show the Cascade logo, post as a **GitHub App** (preferred) or a machine user. The Action already selects the token in this order: App installation token → `CASCADE_GITHUB_TOKEN` → `GITHUB_TOKEN`.
+
+**GitHub App (recommended)**
+
+1. Create an App: [user](https://github.com/settings/apps/new) or `https://github.com/organizations/<org>/settings/apps/new`.
+2. **GitHub App name:** `Cascade` (the thread will show `Cascade[bot]`).
+3. **Homepage URL:** `https://cascade-sigma-three.vercel.app`.
+4. **Webhook:** uncheck Active. Cascade is driven by Actions, not App webhooks.
+5. **Repository permissions:**
+   - Contents: Read and write (Git Data API for stacked PRs)
+   - Issues: Read and write (PR conversation comments)
+   - Pull requests: Read and write (open/update `cascade/remediation/*`)
+6. Create the App. Under **Display information**, upload the logo:
+   - Prefer [`frontend/public/apple-touch-icon.png`](frontend/public/apple-touch-icon.png) (180×180, crops cleanly in the circle).
+   - [`frontend/public/logo.png`](frontend/public/logo.png) is the same mark at 2000×2000 if you want a larger source.
+7. **Generate a private key** and download the `.pem`. Copy the **App ID** from the About section.
+8. **Install App** on the repositories that run Cascade.
+9. In the consumer repo: **Settings → Secrets and variables → Actions**
+   - Variable `CASCADE_GITHUB_APP_ID` = numeric App ID
+   - Secret `CASCADE_GITHUB_APP_PRIVATE_KEY` = full PEM (`-----BEGIN RSA PRIVATE KEY-----` …)
+
+The next `cascade apply` on a schema PR comments as `Cascade[bot]` with that logo. The comment body stays the existing markdown (`## Cascade impact report`); there is no in-body `<img>`.
+
+**Machine user (fallback)**
+
+1. Use a dedicated GitHub account. **Profile picture:** the same PNG as above (GitHub → Settings → Profile).
+2. Fine-grained PAT: Contents read/write, Issues read/write, Pull requests read/write, limited to the repo.
+3. Secret `CASCADE_GITHUB_TOKEN` = the PAT.
+
+Used when `CASCADE_GITHUB_APP_ID` is unset. CLI `cascade apply --mode apply` also honors `CASCADE_GITHUB_TOKEN` over `GITHUB_TOKEN`.
+
 ## CLI
 
 
@@ -255,6 +292,8 @@ A key in the environment does **not** turn LLM on. Mode must be `llm`.
 | `LLM_API_KEY` or `OPENAI_API_KEY`                          | LLM path                                     |
 | `CASCADE_WRITEBACK=1`                                      | Live DataHub/ML tags (never on untrusted CI) |
 | `GITHUB_TOKEN` / `GITHUB_REPOSITORY` / `CASCADE_PR_NUMBER` | Live PR comment (Action sets these)          |
+| `CASCADE_GITHUB_APP_ID` + `CASCADE_GITHUB_APP_PRIVATE_KEY` | Actions: post as GitHub App (`Cascade[bot]` + App logo) |
+| `CASCADE_GITHUB_TOKEN`                                 | Bot PAT; wins over `GITHUB_TOKEN` (CLI or Actions) |
 | `CASCADE_OPEN_DOWNSTREAM_PR=1`                             | Open stacked PR (`/cascade stack` sets this) |
 
 
@@ -267,7 +306,7 @@ See `.env.example`. Actions secrets override `.env`. There are no warehouse cred
 | -------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Modes          | `apply --mode dry-run` (default) writes artifacts only; `--mode apply` allows live GitHub/DataHub when secrets are set     |
 | Policy         | `severity=high` + `/cascade stack` requires an open stacked PR (`--require-policy`)                                        |
-| Comments       | Re-runs **edit** the existing `## Cascade impact report` comment (clear, or summary + stack option)                        |
+| Comments       | Re-runs **edit** the existing `## Cascade impact report` comment. Avatar is the token owner (GitHub App, bot user, or `github-actions[bot]`) |
 | Stacked PR     | Opt-in via `/cascade stack`. Same upstream PR → `cascade/remediation/{n}` on top of the source commits                     |
 | Audit          | Receipts under `cascade/runs/<id>/` (gitignored)                                                                           |
 | Failures       | No GMS on consumer CI → fail; no `CASCADE_OPEN_DOWNSTREAM_PR` → patch artifacts only; LLM failure → deterministic fallback |

@@ -162,8 +162,11 @@ CASCADE_LLM_PROVIDER=openai
 LLM_API_KEY=
 LLM_MODEL=`}</GhCode>
           <P>
-            GitHub fills in GITHUB_TOKEN for you. You do not need a database
-            password. There is no DATABASE_URL.
+            GitHub fills in GITHUB_TOKEN for you. That posts as
+            github-actions[bot]. To show the Cascade logo as the circular
+            comment avatar, create a GitHub App and set CASCADE_GITHUB_APP_ID
+            (see the README). You do not need a database password. There is no
+            DATABASE_URL.
           </P>
         </>
       )
@@ -183,7 +186,9 @@ LLM_MODEL=`}</GhCode>
           </P>
           <P>
             Required secrets: DATAHUB_GMS_URL, DATAHUB_TOKEN. Optional:
-            LLM_API_KEY. Pin the install to a version, not main.
+            LLM_API_KEY. Pin the install to a version, not main. Optional
+            GitHub App (CASCADE_GITHUB_APP_ID) so comments show the Cascade
+            logo as the bot avatar instead of github-actions[bot].
           </P>
           <P>
             cascade init writes the workflow file. You can also download it.
