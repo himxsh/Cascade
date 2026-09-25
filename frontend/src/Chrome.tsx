@@ -1,15 +1,21 @@
 import type { ReactNode } from 'react'
+import type { Me } from './api'
 import { Link, GitHubMark } from './Link'
 import { GITHUB, LICENSE } from './site'
 
 export function Chrome({
   path,
   children,
+  me,
+  authReady,
 }: {
   path: string
   children: ReactNode
+  me: Me | null
+  authReady: boolean
 }) {
   const docsOn = path === '/docs' || path.startsWith('/docs/')
+  const appOn = path === '/app' || path.startsWith('/app/') || path === '/dashboard' || path.startsWith('/dashboard/')
 
   return (
     <div className="min-h-[100dvh] bg-void text-frost">
@@ -36,6 +42,17 @@ export function Chrome({
             <Link href="/changelog" className="hidden rounded-full px-3 py-2 text-mute hover:text-frost sm:inline">
               Changelog
             </Link>
+            {authReady && me ? (
+              <Link
+                href="/app"
+                className={[
+                  'rounded-full px-3 py-2',
+                  appOn ? 'text-frost' : 'text-mute hover:text-frost',
+                ].join(' ')}
+              >
+                App
+              </Link>
+            ) : null}
             <Link
               href={GITHUB}
               className="btn btn-ghost ml-1 h-9 min-h-0 gap-1.5 px-3 py-0 text-sm"
@@ -43,6 +60,29 @@ export function Chrome({
               <GitHubMark />
               GitHub
             </Link>
+            {authReady && me ? (
+              <>
+                {me.avatar_url ? (
+                  <img
+                    src={me.avatar_url}
+                    alt=""
+                    className="ml-1 h-8 w-8 rounded-full"
+                  />
+                ) : (
+                  <span className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-panel text-xs font-semibold">
+                    {me.login.slice(0, 1).toUpperCase()}
+                  </span>
+                )}
+                <a href="/auth/logout" className="rounded-full px-3 py-2 text-mute hover:text-frost">
+                  Sign out
+                </a>
+              </>
+            ) : null}
+            {authReady && !me ? (
+              <Link href="/signin" className="btn btn-ember ml-1 h-9 min-h-0 px-3 py-0 text-sm">
+                Sign in
+              </Link>
+            ) : null}
           </nav>
         </header>
       </div>
@@ -62,6 +102,11 @@ export function Chrome({
             <li>
               <Link href="/docs" className="hover:text-frost">
                 Docs
+              </Link>
+            </li>
+            <li>
+              <Link href="/app" className="hover:text-frost">
+                App
               </Link>
             </li>
             <li>

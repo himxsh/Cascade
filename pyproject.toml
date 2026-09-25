@@ -22,7 +22,7 @@ classifiers = [
 urls = { Homepage = "https://github.com/himxsh/Cascade", Repository = "https://github.com/himxsh/Cascade", Issues = "https://github.com/himxsh/Cascade/issues" }
 
 [tool.setuptools]
-packages = ["cascade"]
+packages = ["cascade", "api"]
 
 [tool.setuptools.package-data]
 cascade = ["prompts/*.md", "templates/*"]
@@ -32,7 +32,7 @@ cascade = "cascade.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest"]
-ui = ["fastapi>=0.115", "uvicorn[standard]>=0.32"]
+ui = ["fastapi>=0.115", "uvicorn[standard]>=0.32", "httpx>=0.27"]
 writeback = ["acryl-datahub"]
 
 [tool.vercel]
