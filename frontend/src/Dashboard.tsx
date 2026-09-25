@@ -119,8 +119,8 @@ export function Dashboard({ me }: { me: Me }) {
   }
 
   const enabledCount = (repos ?? []).filter((r) => r.enabled).length
-  const installUrl = config?.app_install_url
-  const installed = (me.installations ?? []).some((i) => i.installation_id !== 0)
+  const installUrl = me.app_install_url || config?.app_install_url
+  const installed = (me.installations ?? []).some((i) => i.installation_id > 0)
 
   return (
     <div className="mx-auto max-w-[1120px] px-5 py-12 sm:px-6">

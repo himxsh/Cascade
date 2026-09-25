@@ -184,8 +184,9 @@ LLM_MODEL=`}</GhCode>
           <P>
             Until those secrets exist, the dashboard still works: sign in with
             OAuth, or set CASCADE_DEV_LOGIN=1 for a local test session. Repo
-            enable/disable is stored in SQLite. Webhooks verify HMAC and log
-            events; they do not yet mint an installation token or comment.
+            enable/disable is stored in DATABASE_URL (SQLite locally; postgres
+            or libSQL on Vercel). Webhooks verify HMAC and log events; they do
+            not yet mint an installation token or comment.
           </P>
           <GhCode file=".env.example">{`# Hosted dashboard (not the CLI)
 DATABASE_URL=sqlite:///./cascade.db

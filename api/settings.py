@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from urllib.parse import urlencode
 
 
 def env_flag(name: str) -> bool:
@@ -41,11 +42,14 @@ def app_slug() -> str:
     return env_str("GITHUB_APP_SLUG")
 
 
-def app_install_url() -> str | None:
+def app_install_url(state: str | None = None) -> str | None:
     slug = app_slug()
     if not slug:
         return None
-    return f"https://github.com/apps/{slug}/installations/new"
+    url = f"https://github.com/apps/{slug}/installations/new"
+    if state:
+        url = f"{url}?{urlencode({'state': state})}"
+    return url
 
 
 def session_secret() -> str:

@@ -13,8 +13,21 @@ from unittest import mock
 
 try:
     from fastapi.testclient import TestClient
+    from api.server import app as SERVER_APP
 except ImportError:  # pragma: no cover
     TestClient = None  # type: ignore[misc, assignment]
+    SERVER_APP = None  # type: ignore[misc, assignment]
+
+from api.auth import COOKIE_NAME
+from api.db import get_conn, reset_bootstrap_cache
+from api.github_app import GitHubAppError, make_setup_state
+from api.store import (
+    adopt_installation,
+    create_session,
+    seed_mock_workspace,
+    set_repo_enabled,
+    upsert_user,
+)
 
 
 def _sign(body: bytes, secret: str) -> str:
@@ -43,17 +56,12 @@ class TestProductApi(unittest.TestCase):
             clear=False,
         )
         self.env.start()
-        from api.db import reset_bootstrap_cache
-
         reset_bootstrap_cache()
-        from api.server import app
-
-        self.client = TestClient(app)
+        self.app = SERVER_APP
+        self.client = TestClient(SERVER_APP)
 
     def tearDown(self) -> None:
         self.env.stop()
-        from api.db import reset_bootstrap_cache
-
         reset_bootstrap_cache()
         self.tmp.cleanup()
 
@@ -189,6 +197,107 @@ class TestProductApi(unittest.TestCase):
             },
         )
         self.assertEqual(dup.json()["status"], "duplicate")
+
+    def test_two_users_isolated_mock_workspaces(self) -> None:
+        with get_conn() as conn:
+            alice = upsert_user(conn, github_user_id=10, login="alice")
+            bob = upsert_user(conn, github_user_id=11, login="bob")
+            seed_mock_workspace(conn, int(alice["id"]))
+            seed_mock_workspace(conn, int(bob["id"]))
+            a_repos = conn.execute(
+                """
+                SELECT r.id FROM repos r
+                JOIN installations i ON i.installation_id = r.installation_id
+                WHERE i.installer_user_id = ?
+                ORDER BY r.id
+                """,
+                (int(alice["id"]),),
+            ).fetchall()
+            set_repo_enabled(
+                conn,
+                user_id=int(alice["id"]),
+                repo_id=int(a_repos[0]["id"]),
+                enabled=True,
+            )
+            token_a = create_session(conn, int(alice["id"]))
+            token_b = create_session(conn, int(bob["id"]))
+
+        alice_client = TestClient(self.app)
+        bob_client = TestClient(self.app)
+        alice_client.cookies.set(COOKIE_NAME, token_a)
+        bob_client.cookies.set(COOKIE_NAME, token_b)
+
+        a_listed = alice_client.get("/api/repos").json()["repos"]
+        b_listed = bob_client.get("/api/repos").json()["repos"]
+        self.assertTrue(any(row["enabled"] for row in a_listed))
+        self.assertFalse(any(row["enabled"] for row in b_listed))
+        self.assertNotEqual(
+            {row["installation_id"] for row in a_listed},
+            {row["installation_id"] for row in b_listed},
+        )
+        self.assertTrue(all(int(row["installation_id"]) < 0 for row in a_listed))
+        self.assertTrue(all(int(row["installation_id"]) < 0 for row in b_listed))
+
+    def test_setup_rejects_foreign_installation(self) -> None:
+        with get_conn() as conn:
+            alice = upsert_user(conn, github_user_id=10, login="alice")
+            bob = upsert_user(conn, github_user_id=11, login="bob")
+            adopt_installation(
+                conn,
+                user_id=int(alice["id"]),
+                installation_id=99,
+                account_login="acme",
+            )
+            token_a = create_session(conn, int(alice["id"]))
+            token_b = create_session(conn, int(bob["id"]))
+
+        alice_client = TestClient(self.app)
+        bob_client = TestClient(self.app)
+        alice_client.cookies.set(COOKIE_NAME, token_a)
+        bob_client.cookies.set(COOKIE_NAME, token_b)
+
+        stolen = bob_client.get("/api/github/setup?installation_id=99", follow_redirects=False)
+        self.assertEqual(stolen.status_code, 302)
+        self.assertIn("installation_owned", stolen.headers["location"])
+
+        me_a = alice_client.get("/api/me").json()
+        me_b = bob_client.get("/api/me").json()
+        self.assertTrue(any(row["installation_id"] == 99 for row in me_a["installations"]))
+        self.assertFalse(any(row["installation_id"] == 99 for row in me_b["installations"]))
+
+    def test_setup_requires_github_when_app_configured(self) -> None:
+        self.client.get("/auth/dev-login", follow_redirects=False)
+        with mock.patch("api.server.app_configured", return_value=True):
+            with mock.patch(
+                "api.server.fetch_installation",
+                side_effect=GitHubAppError("missing", status=404),
+            ):
+                res = self.client.get("/api/github/setup?installation_id=99", follow_redirects=False)
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("installation_not_found", res.headers["location"])
+
+    def test_setup_org_requires_state_when_app_configured(self) -> None:
+        self.client.get("/auth/dev-login", follow_redirects=False)
+        me = self.client.get("/api/me").json()
+        remote = {
+            "installation_id": 77,
+            "account_login": "acme",
+            "account_type": "Organization",
+            "account_id": 555,
+        }
+        with mock.patch("api.server.app_configured", return_value=True):
+            with mock.patch("api.server.fetch_installation", return_value=remote):
+                denied = self.client.get(
+                    "/api/github/setup?installation_id=77",
+                    follow_redirects=False,
+                )
+                self.assertIn("installation_forbidden", denied.headers["location"])
+                state = make_setup_state(me)
+                accepted = self.client.get(
+                    f"/api/github/setup?installation_id=77&state={state}",
+                    follow_redirects=False,
+                )
+        self.assertIn("/app/repos", accepted.headers["location"])
 
     def test_webhook_enabled_repo_accepted(self) -> None:
         self.client.get("/auth/dev-login", follow_redirects=False)

@@ -294,7 +294,7 @@ uvicorn api.server:app --reload --port 8000
 cd frontend && npm install && npm run dev
 ```
 
-[http://localhost:5173](http://localhost:5173) — marketing at `/`, then **Sign in** → `/app`. `POST /api/run` and `GET /api/health` still work. Webhooks: `POST /api/github/webhook` (HMAC). App comments are not live until GitHub App secrets exist; see [plan.md](plan.md) and Docs → GitHub App.
+[http://localhost:5173](http://localhost:5173) — marketing at `/`, then **Sign in** → `/app`. `POST /api/run` and `GET /api/health` still work. Webhooks: `POST /api/github/webhook` (HMAC). App comments are not live until GitHub App secrets exist; see Docs → GitHub App.
 
 ## Limitations
 
