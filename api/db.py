@@ -222,7 +222,6 @@ def _connect_sqlite(target: str) -> sqlite3.Connection:
     path = _sqlite_file(target)
     conn = sqlite3.connect(path, timeout=10, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.dialect = "sqlite"  # type: ignore[attr-defined]
     conn.execute("PRAGMA foreign_keys = ON")
     try:
         conn.execute("PRAGMA journal_mode = WAL")
