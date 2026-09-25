@@ -7,7 +7,19 @@ name = "cascade-bot"
 version = "0.1.0"
 requires-python = ">=3.11"
 description = "An agent that turns a breaking schema PR into a coordinated migration"
+readme = "README.md"
 license = { text = "Apache-2.0" }
+authors = [{ name = "Himesh Jain" }]
+keywords = ["datahub", "dbt", "sql", "schema", "lineage", "migration"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Quality Assurance",
+]
+urls = { Homepage = "https://github.com/himxsh/Cascade", Repository = "https://github.com/himxsh/Cascade", Issues = "https://github.com/himxsh/Cascade/issues" }
 
 [tool.setuptools]
 packages = ["cascade"]
