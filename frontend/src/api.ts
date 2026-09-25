@@ -18,6 +18,7 @@ export type Me = {
   repo_count: number
   enabled_count: number
   banner: string | null
+  app_install_url?: string | null
 }
 
 export type Installation = {

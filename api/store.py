@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import secrets
-import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from api.db import row_to_dict
 
-# GitHub installation ids are positive. 0 is the local mock until the App exists.
+# GitHub installation ids are positive. Per-user mocks use -user_id (never 0).
 MOCK_INSTALLATION_ID = 0
 
 MOCK_REPOS = (
@@ -23,6 +22,26 @@ DEV_GITHUB_USER_ID = 0
 DEV_LOGIN = "dev"
 
 
+class InstallationOwnershipError(Exception):
+    """An installation already belongs to a different dashboard user."""
+
+    def __init__(self, message: str = "installation belongs to another user"):
+        super().__init__(message)
+        self.message = message
+
+
+def is_mock_installation_id(installation_id: int) -> bool:
+    return int(installation_id) <= MOCK_INSTALLATION_ID
+
+
+def mock_installation_id_for_user(user_id: int) -> int:
+    """Stable, per-user mock id. GitHub installation ids are always positive."""
+    uid = int(user_id)
+    if uid <= 0:
+        raise ValueError("user_id must be a positive users.id")
+    return -uid
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -32,7 +51,7 @@ def _iso(dt: datetime) -> str:
 
 
 def upsert_user(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     github_user_id: int,
     login: str,
@@ -60,7 +79,7 @@ def upsert_user(
     return row_to_dict(row) or {}
 
 
-def create_session(conn: sqlite3.Connection, user_id: int) -> str:
+def create_session(conn: Any, user_id: int) -> str:
     token = secrets.token_urlsafe(32)
     now = _now()
     conn.execute(
@@ -70,7 +89,7 @@ def create_session(conn: sqlite3.Connection, user_id: int) -> str:
     return token
 
 
-def get_session_user(conn: sqlite3.Connection, session_id: str | None) -> dict[str, Any] | None:
+def get_session_user(conn: Any, session_id: str | None) -> dict[str, Any] | None:
     if not session_id:
         return None
     row = conn.execute(
@@ -84,14 +103,14 @@ def get_session_user(conn: sqlite3.Connection, session_id: str | None) -> dict[s
     return row_to_dict(row)
 
 
-def delete_session(conn: sqlite3.Connection, session_id: str | None) -> None:
+def delete_session(conn: Any, session_id: str | None) -> None:
     if not session_id:
         return
     conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
 
 def upsert_installation(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     installation_id: int,
     account_login: str,
@@ -103,13 +122,18 @@ def upsert_installation(
         (installation_id,),
     ).fetchone()
     if existing:
+        owner_id = int(existing["installer_user_id"])
+        if owner_id != int(installer_user_id):
+            raise InstallationOwnershipError(
+                "installation belongs to another user"
+            )
         conn.execute(
             """
             UPDATE installations
-            SET account_login = ?, account_type = ?, installer_user_id = ?
+            SET account_login = ?, account_type = ?
             WHERE installation_id = ?
             """,
-            (account_login, account_type, installer_user_id, installation_id),
+            (account_login, account_type, installation_id),
         )
     else:
         conn.execute(
@@ -127,12 +151,12 @@ def upsert_installation(
     return row_to_dict(row) or {}
 
 
-def delete_installation(conn: sqlite3.Connection, installation_id: int) -> None:
+def delete_installation(conn: Any, installation_id: int) -> None:
     conn.execute("DELETE FROM repos WHERE installation_id = ?", (installation_id,))
     conn.execute("DELETE FROM installations WHERE installation_id = ?", (installation_id,))
 
 
-def list_installations_for_user(conn: sqlite3.Connection, user_id: int) -> list[dict[str, Any]]:
+def list_installations_for_user(conn: Any, user_id: int) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT * FROM installations WHERE installer_user_id = ? ORDER BY installation_id",
         (user_id,),
@@ -140,33 +164,37 @@ def list_installations_for_user(conn: sqlite3.Connection, user_id: int) -> list[
     return [row_to_dict(r) or {} for r in rows]
 
 
-def seed_mock_workspace(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]:
-    """Create a mock install + repos so the dashboard can be used without a GitHub App."""
+def seed_mock_workspace(conn: Any, user_id: int) -> dict[str, Any]:
+    """Create a per-user mock install + repos so the dashboard works without a GitHub App."""
     existing = list_installations_for_user(conn, user_id)
     if existing:
         return existing[0]
+    mock_id = mock_installation_id_for_user(user_id)
     inst = upsert_installation(
         conn,
-        installation_id=MOCK_INSTALLATION_ID,
+        installation_id=mock_id,
         account_login="acme",
         account_type="Organization",
         installer_user_id=user_id,
     )
-    seed_mock_repos(conn, MOCK_INSTALLATION_ID)
+    seed_mock_repos(conn, mock_id)
     return inst
 
 
-def seed_mock_repos(conn: sqlite3.Connection, installation_id: int) -> list[dict[str, Any]]:
-    count = conn.execute(
-        "SELECT COUNT(*) AS n FROM repos WHERE installation_id = ?",
-        (installation_id,),
-    ).fetchone()
-    if count and int(count["n"]) > 0:
-        return list_repos_for_installation(conn, installation_id)
+def seed_mock_repos(conn: Any, installation_id: int) -> list[dict[str, Any]]:
     for spec in MOCK_REPOS:
+        found = conn.execute(
+            """
+            SELECT id FROM repos
+            WHERE installation_id = ? AND github_repo_id = ?
+            """,
+            (installation_id, spec["github_repo_id"]),
+        ).fetchone()
+        if found:
+            continue
         conn.execute(
             """
-            INSERT OR IGNORE INTO repos (
+            INSERT INTO repos (
               installation_id, owner, name, github_repo_id, enabled
             ) VALUES (?, ?, ?, ?, ?)
             """,
@@ -181,24 +209,29 @@ def seed_mock_repos(conn: sqlite3.Connection, installation_id: int) -> list[dict
     return list_repos_for_installation(conn, installation_id)
 
 
+def _delete_mock_installations_for_user(conn: Any, user_id: int) -> None:
+    rows = conn.execute(
+        """
+        SELECT installation_id FROM installations
+        WHERE installer_user_id = ? AND installation_id <= 0
+        """,
+        (user_id,),
+    ).fetchall()
+    for row in rows:
+        delete_installation(conn, int(row["installation_id"]))
+
+
 def adopt_installation(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     user_id: int,
     installation_id: int,
     account_login: str = "unknown",
     account_type: str = "Organization",
 ) -> dict[str, Any]:
-    if installation_id != MOCK_INSTALLATION_ID:
-        mock = conn.execute(
-            """
-            SELECT installation_id FROM installations
-            WHERE installer_user_id = ? AND installation_id = ?
-            """,
-            (user_id, MOCK_INSTALLATION_ID),
-        ).fetchone()
-        if mock:
-            delete_installation(conn, MOCK_INSTALLATION_ID)
+    if is_mock_installation_id(installation_id):
+        raise InstallationOwnershipError("mock installation ids cannot be adopted from setup")
+    _delete_mock_installations_for_user(conn, user_id)
     inst = upsert_installation(
         conn,
         installation_id=installation_id,
@@ -210,7 +243,7 @@ def adopt_installation(
     return inst
 
 
-def list_repos_for_installation(conn: sqlite3.Connection, installation_id: int) -> list[dict[str, Any]]:
+def list_repos_for_installation(conn: Any, installation_id: int) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT * FROM repos WHERE installation_id = ? ORDER BY owner, name",
         (installation_id,),
@@ -218,7 +251,7 @@ def list_repos_for_installation(conn: sqlite3.Connection, installation_id: int) 
     return [_repo_out(r) for r in rows]
 
 
-def list_repos_for_user(conn: sqlite3.Connection, user_id: int) -> list[dict[str, Any]]:
+def list_repos_for_user(conn: Any, user_id: int) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
         SELECT r.* FROM repos r
@@ -231,7 +264,7 @@ def list_repos_for_user(conn: sqlite3.Connection, user_id: int) -> list[dict[str
     return [_repo_out(r) for r in rows]
 
 
-def _repo_out(row: sqlite3.Row) -> dict[str, Any]:
+def _repo_out(row: Any) -> dict[str, Any]:
     data = row_to_dict(row) or {}
     data["enabled"] = bool(data.get("enabled"))
     data["full_name"] = f"{data.get('owner')}/{data.get('name')}"
@@ -239,7 +272,7 @@ def _repo_out(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def set_repo_enabled(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     user_id: int,
     repo_id: int,
@@ -261,7 +294,7 @@ def set_repo_enabled(
 
 
 def lookup_repo(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     owner: str | None,
     name: str | None,
@@ -289,7 +322,7 @@ def lookup_repo(
 
 
 def record_delivery(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     delivery_id: str,
     event: str,

@@ -84,12 +84,80 @@ class TestWebhookFilter(unittest.TestCase):
         payload = {
             "action": "created",
             "repository": PR_PAYLOAD["repository"],
-            "issue": {"number": 3, "pull_request": {"url": "https://api.github.com/repos/acme/analytics/pulls/3"}},
-            "comment": {"body": "/cascade stack\nplease"},
+            "issue": {
+                "number": 3,
+                "user": {"login": "octocat"},
+                "pull_request": {"url": "https://api.github.com/repos/acme/analytics/pulls/3"},
+            },
+            "comment": {
+                "body": "/cascade stack\nplease",
+                "author_association": "OWNER",
+                "user": {"login": "octocat"},
+            },
         }
         decision = decide_event("issue_comment", payload, repo_enabled=True)
         self.assertEqual(decision["status"], "accepted")
         self.assertTrue(decision["stack_requested"])
+        self.assertTrue(decision["queued"])
+
+    def test_stack_comment_requires_created(self) -> None:
+        payload = {
+            "action": "edited",
+            "repository": PR_PAYLOAD["repository"],
+            "issue": {
+                "number": 3,
+                "user": {"login": "octocat"},
+                "pull_request": {"url": "https://example"},
+            },
+            "comment": {
+                "body": "/cascade stack",
+                "author_association": "OWNER",
+                "user": {"login": "octocat"},
+            },
+        }
+        decision = decide_event("issue_comment", payload, repo_enabled=True)
+        self.assertEqual(decision["status"], "skipped")
+        self.assertEqual(decision["reason"], "ignored_action")
+        self.assertFalse(decision["queued"])
+
+    def test_stack_comment_requires_actor(self) -> None:
+        payload = {
+            "action": "created",
+            "repository": PR_PAYLOAD["repository"],
+            "issue": {
+                "number": 3,
+                "user": {"login": "octocat"},
+                "pull_request": {"url": "https://example"},
+            },
+            "comment": {
+                "body": "/cascade stack",
+                "author_association": "NONE",
+                "user": {"login": "drive-by"},
+            },
+        }
+        decision = decide_event("issue_comment", payload, repo_enabled=True)
+        self.assertEqual(decision["status"], "skipped")
+        self.assertEqual(decision["reason"], "ignored_actor")
+        self.assertFalse(decision["queued"])
+
+    def test_stack_comment_allows_pr_author(self) -> None:
+        payload = {
+            "action": "created",
+            "repository": PR_PAYLOAD["repository"],
+            "issue": {
+                "number": 3,
+                "user": {"login": "octocat"},
+                "pull_request": {"url": "https://example"},
+            },
+            "comment": {
+                "body": "/cascade stack",
+                "author_association": "NONE",
+                "user": {"login": "octocat"},
+            },
+        }
+        decision = decide_event("issue_comment", payload, repo_enabled=True)
+        self.assertEqual(decision["status"], "accepted")
+        self.assertTrue(decision["queued"])
 
     def test_non_stack_comment(self) -> None:
         payload = {

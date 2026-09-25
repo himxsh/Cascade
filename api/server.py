@@ -21,6 +21,13 @@ from api.auth import (
     unsign_payload,
 )
 from api.db import get_conn
+from api.github_app import (
+    GitHubAppError,
+    fetch_installation,
+    make_setup_state,
+    setup_state_matches,
+    user_may_claim_installation,
+)
 from api.settings import (
     app_configured,
     app_install_url,
@@ -34,10 +41,12 @@ from api.settings import (
 from api.store import (
     DEV_GITHUB_USER_ID,
     DEV_LOGIN,
+    InstallationOwnershipError,
     adopt_installation,
     create_session,
     delete_session,
     get_session_user,
+    is_mock_installation_id,
     list_installations_for_user,
     list_repos_for_user,
     lookup_repo,
@@ -292,6 +301,10 @@ def api_me(request: Request) -> dict[str, Any]:
     with get_conn() as conn:
         installations = list_installations_for_user(conn, int(user["id"]))
         repos = list_repos_for_user(conn, int(user["id"]))
+    try:
+        install_url = app_install_url(make_setup_state(user))
+    except AuthError:
+        install_url = app_install_url()
     return {
         **_user_public(user),
         "installations": [
@@ -305,6 +318,7 @@ def api_me(request: Request) -> dict[str, Any]:
         "repo_count": len(repos),
         "enabled_count": sum(1 for row in repos if row["enabled"]),
         "banner": _app_banner(),
+        "app_install_url": install_url,
     }
 
 
@@ -316,7 +330,9 @@ def api_list_repos(request: Request) -> dict[str, Any]:
             seed_mock_workspace(conn, int(user["id"]))
         repos = list_repos_for_user(conn, int(user["id"]))
         installations = list_installations_for_user(conn, int(user["id"]))
-    mock = (not app_configured()) or any(i["installation_id"] == 0 for i in installations)
+    mock = (not app_configured()) or any(
+        is_mock_installation_id(int(i["installation_id"])) for i in installations
+    )
     return {
         "repos": repos,
         "mock": mock,
@@ -352,6 +368,7 @@ def api_github_setup(
     request: Request,
     installation_id: int | None = None,
     setup_action: str | None = None,
+    state: str | None = None,
     account_login: str | None = None,
     account_type: str | None = None,
 ) -> RedirectResponse:
@@ -362,14 +379,34 @@ def api_github_setup(
         return RedirectResponse(f"/signin?next={quote(setup_url, safe='')}", status_code=302)
     if installation_id is None:
         return RedirectResponse("/app/connect?error=missing_installation", status_code=302)
-    with get_conn() as conn:
-        adopt_installation(
-            conn,
-            user_id=int(user["id"]),
-            installation_id=installation_id,
-            account_login=account_login or "unknown",
-            account_type=account_type or "Organization",
-        )
+    if is_mock_installation_id(installation_id):
+        return RedirectResponse("/app/connect?error=invalid_installation", status_code=302)
+
+    claimed_login = account_login or "unknown"
+    claimed_type = account_type or "Organization"
+    state_ok = setup_state_matches(state, user)
+
+    if app_configured():
+        try:
+            remote = fetch_installation(installation_id)
+        except GitHubAppError:
+            return RedirectResponse("/app/connect?error=installation_not_found", status_code=302)
+        if not user_may_claim_installation(user, remote, state_ok=state_ok):
+            return RedirectResponse("/app/connect?error=installation_forbidden", status_code=302)
+        claimed_login = remote["account_login"]
+        claimed_type = remote["account_type"]
+
+    try:
+        with get_conn() as conn:
+            adopt_installation(
+                conn,
+                user_id=int(user["id"]),
+                installation_id=installation_id,
+                account_login=claimed_login,
+                account_type=claimed_type,
+            )
+    except InstallationOwnershipError:
+        return RedirectResponse("/app/connect?error=installation_owned", status_code=302)
     dest = "/app/repos?installed=1"
     if setup_action:
         dest += f"&setup_action={quote(setup_action)}"

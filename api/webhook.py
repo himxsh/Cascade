@@ -15,6 +15,7 @@ log = logging.getLogger("cascade.webhook")
 REMEDIATION_PREFIX = "cascade/remediation/"
 STACK_COMMAND = "/cascade stack"
 PR_ACTIONS = frozenset({"opened", "synchronize", "reopened", "ready_for_review", "edited"})
+STACK_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 
 
 class WebhookError(Exception):
@@ -117,13 +118,20 @@ def decide_event(
         return base
 
     if event == "issue_comment":
+        if action_s != "created":
+            base["reason"] = "ignored_action"
+            return base
         issue = payload.get("issue") or {}
         if not issue.get("pull_request"):
             base["reason"] = "not_a_pull_request"
             return base
-        body = str((payload.get("comment") or {}).get("body") or "")
+        comment = payload.get("comment") or {}
+        body = str(comment.get("body") or "")
         if not body.lstrip().startswith(STACK_COMMAND):
             base["reason"] = "not_stack_command"
+            return base
+        if not _stack_actor_allowed(comment, issue):
+            base["reason"] = "ignored_actor"
             return base
         base["stack_requested"] = True
         pr_ref = str((issue.get("pull_request") or {}).get("url") or "")
@@ -151,3 +159,14 @@ def log_decision(decision: dict[str, Any], *, delivery_id: str) -> None:
         "comment": False,
     }
     log.info("%s", json.dumps(record, sort_keys=True))
+
+
+def _stack_actor_allowed(comment: dict[str, Any], issue: dict[str, Any]) -> bool:
+    """Same spirit as the Actions path: created-only is checked by the caller;
+    allow OWNER/MEMBER/COLLABORATOR or the pull request author."""
+    association = str(comment.get("author_association") or "").upper()
+    if association in STACK_ASSOCIATIONS:
+        return True
+    comment_login = str((comment.get("user") or {}).get("login") or "").strip()
+    issue_login = str((issue.get("user") or {}).get("login") or "").strip()
+    return bool(comment_login) and comment_login.lower() == issue_login.lower()
