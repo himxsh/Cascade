@@ -63,17 +63,17 @@ export function InstallPanel() {
   }
 
   return (
-    <div className="w-full">
+    <div className="mx-auto w-full max-w-[22.5rem]">
       <p className="mb-2.5 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-mute">
         Install · Python 3.11+
       </p>
       <button
         type="button"
-        className="group flex w-full items-start gap-3 rounded-lg border border-frost/[0.1] bg-ink px-4 py-3 text-left transition-colors hover:border-frost/20 hover:bg-void"
+        className="group flex w-full items-center gap-3 rounded-lg border border-frost/[0.1] bg-ink px-3.5 py-2.5 text-left transition-colors hover:border-frost/20 hover:bg-void"
         onClick={() => void onCopy()}
         aria-label={copied ? 'Copied install command' : 'Copy install command'}
       >
-        <span className="cmd select-none pt-px text-ember/80" aria-hidden="true">
+        <span className="cmd select-none text-ember/80" aria-hidden="true">
           $
         </span>
         <code className="cmd min-w-0 flex-1 whitespace-pre-wrap break-all text-[0.8125rem] leading-relaxed text-frost">
@@ -81,7 +81,7 @@ export function InstallPanel() {
         </code>
         <span
           className={[
-            'mt-px flex shrink-0 items-center gap-1.5 text-[0.68rem] tracking-wide',
+            'flex shrink-0 items-center gap-1.5 text-[0.68rem] tracking-wide',
             copied
               ? 'text-ember'
               : 'text-mute/80 transition-colors group-hover:text-frost',
