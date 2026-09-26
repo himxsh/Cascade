@@ -11,6 +11,7 @@ from cascade.datahub_live import (
     health_check,
     load_catalog_live,
     resolve_catalog,
+    search_dataset_urns,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "demo" / "fixtures" / "demo_graph.json"
@@ -60,6 +61,27 @@ class TestHealthCheck(unittest.TestCase):
     @patch("urllib.request.Request")
     def test_connection_error(self, mock_req, mock_urlopen):
         self.assertFalse(health_check("http://fake:9999"))
+
+
+class TestSearchDatasetUrns(unittest.TestCase):
+    @patch("cascade.datahub_live._graphql")
+    def test_parses_urns(self, mock_gql):
+        mock_gql.return_value = {
+            "data": {
+                "searchAcrossEntities": {
+                    "searchResults": [
+                        {"entity": {"urn": RAW_URN}},
+                        {"entity": {"urn": STG_URN}},
+                    ]
+                }
+            }
+        }
+        urns = search_dataset_urns("orders", gms_url="http://fake:8080")
+        self.assertEqual(urns, [RAW_URN, STG_URN])
+
+    @patch("cascade.datahub_live._graphql", side_effect=ValueError("no search"))
+    def test_failure_is_empty(self, mock_gql):
+        self.assertEqual(search_dataset_urns("orders", gms_url="http://fake:8080"), [])
 
 
 class TestFetchDataset(unittest.TestCase):
