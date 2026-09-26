@@ -106,14 +106,14 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>Install</H>
           <P>
-            Cascade is a Python CLI. You need Python 3.11 or newer. This
-            installs cascade-bot {VERSION} from PyPI.
+            Cascade is a Python CLI. You need Python 3.11 or newer.
           </P>
           <GhCode file="terminal">{PIP}</GhCode>
           <P>
-            Then run cascade init in your repo. That writes the config, an
-            example secrets file, and the GitHub workflow. In GitHub Actions,
-            pin a version. Do not install from main.
+            That installs cascade-bot from PyPI (latest published release; the
+            current one is {VERSION}). Then run cascade init in your repo. That
+            writes the config, an example secrets file, and the GitHub workflow.
+            In GitHub Actions, pin a version. Do not install from main.
           </P>
           <P>
             Only add writeback if you want Cascade to leave a note on the table
@@ -179,14 +179,13 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>GitHub App</H>
           <P>
-            Sign in, install the Cascade GitHub App, and enable repositories in
-            the dashboard. Cascade then comments on pull requests for those
-            repos. Creating the App is an operator step; credentials stay on the
-            server, never in the browser.
+            A GitHub App can be connected later so this site can track which
+            repositories you enable. Credentials stay on the server, never in
+            the browser.
           </P>
           <P>
-            The GitHub Action path stays available if you want to run Cascade in
-            your own workflows without the hosted dashboard.
+            Today, comments on pull requests come from the GitHub Action you
+            add to the repo. That path does not need this dashboard.
           </P>
           <p className="mt-6">
             <Link href="/docs/action" className="btn btn-ghost">
@@ -335,8 +334,7 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
           <h2 className="mt-8 text-xl font-semibold">Do I need an account?</h2>
           <P>
             No. Install the CLI and add the GitHub Action to your repo. Sign-in
-            on this site is optional, for enabling App comments on chosen
-            repositories.
+            on this site is optional.
           </P>
         </>
       )

@@ -19,8 +19,7 @@ export function Changelog() {
             Install with <code className="cmd text-frost">pip install cascade-bot</code>.
           </li>
           <li>
-            Optional GitHub sign-in dashboard to enable repositories for App
-            comments.
+            Optional GitHub sign-in dashboard to enable repositories.
           </li>
           <li>
             By default it only writes local files. It will not open a GitHub

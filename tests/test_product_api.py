@@ -70,6 +70,15 @@ class TestProductApi(unittest.TestCase):
         self.assertEqual(health.status_code, 200)
         self.assertEqual(health.json(), {"ok": True})
 
+    def test_anonymous_health_survives_db_outage(self) -> None:
+        with mock.patch("api.server.get_conn", side_effect=RuntimeError("db down")):
+            health = self.client.get("/api/health")
+            cfg = self.client.get("/api/auth/config")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.json(), {"ok": True})
+        self.assertEqual(cfg.status_code, 200)
+        self.assertNotIn("banner", cfg.json())
+
     def test_authenticated_health_includes_infra(self) -> None:
         self.client.get("/auth/dev-login", follow_redirects=False)
         body = self.client.get("/api/health").json()
@@ -109,8 +118,10 @@ class TestProductApi(unittest.TestCase):
         self.assertNotIn("Cascade UI API", docs.text)
 
     def test_run_rejects_bad_diff(self) -> None:
-        with mock.patch.dict(os.environ, {"VERCEL": ""}, clear=False):
-            res = self.client.post("/api/run", json={"diff": "{not-json"})
+        denied = self.client.post("/api/run", json={"diff": "{not-json"})
+        self.assertEqual(denied.status_code, 401)
+        self.client.get("/auth/dev-login", follow_redirects=False)
+        res = self.client.post("/api/run", json={"diff": "{not-json"})
         self.assertIn(res.status_code, {400, 502})
         self.assertNotIn("/var/", res.text)
         self.assertNotIn("cascade/runs", res.text)

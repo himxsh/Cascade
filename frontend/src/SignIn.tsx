@@ -6,6 +6,7 @@ import { GITHUB } from './site'
 export function SignIn() {
   const [config, setConfig] = useState<AuthConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [configFailed, setConfigFailed] = useState(false)
   const [nextPath, setNextPath] = useState('/app')
 
   useEffect(() => {
@@ -19,9 +20,13 @@ export function SignIn() {
       setError(reason.replaceAll('_', ' '))
     }
     void fetchAuthConfig()
-      .then(setConfig)
+      .then((cfg) => {
+        setConfig(cfg)
+        setConfigFailed(false)
+      })
       .catch(() => {
-        setConfig({ oauth_configured: false, dev_login: false })
+        setConfig(null)
+        setConfigFailed(true)
       })
   }, [])
 
@@ -35,6 +40,13 @@ export function SignIn() {
       {error ? (
         <p className="slab mt-6 px-4 py-3 text-sm text-frost" role="alert">
           {error}
+        </p>
+      ) : null}
+
+      {configFailed ? (
+        <p className="mt-8 text-mute" role="alert">
+          Could not check whether sign-in is available. Refresh the page to try
+          again.
         </p>
       ) : null}
 

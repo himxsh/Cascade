@@ -77,8 +77,3 @@ def cookie_secure(forwarded_proto: str, scheme: str) -> bool:
 def api_docs_enabled() -> bool:
     """Swagger/ReDoc/OpenAPI are opt-in so marketing /docs stays the product docs."""
     return env_flag("CASCADE_API_DOCS")
-
-
-def hosted_public() -> bool:
-    """True on Vercel production and preview deploys."""
-    return bool(os.environ.get("VERCEL"))

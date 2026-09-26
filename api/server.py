@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from typing import Any, Literal
@@ -36,7 +37,6 @@ from api.settings import (
     cookie_secure,
     dev_login_enabled,
     env_str,
-    hosted_public,
     oauth_configured,
     webhook_secret,
 )
@@ -93,6 +93,7 @@ APP_NOT_READY_BANNER = (
     "The dashboard uses a sample repository list until the App is registered."
 )
 _API_DOCS = api_docs_enabled()
+_log = logging.getLogger("cascade.api")
 
 
 def _static_file(relative: str) -> Path | None:
@@ -203,6 +204,8 @@ def _clear_session_cookie(response: Response, request: Request) -> None:
 
 def _current_user(request: Request) -> dict[str, Any] | None:
     token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return None
     with get_conn() as conn:
         return get_session_user(conn, token)
 
@@ -274,8 +277,7 @@ def api_demo_diff() -> dict[str, Any]:
 
 @app.post("/api/run")
 def api_run(request: Request, body: RunRequest) -> dict[str, Any]:
-    if hosted_public() and _current_user(request) is None:
-        raise HTTPException(status_code=401, detail="not authenticated")
+    _require_user(request)
     if body.source == "live" and not health_check():
         raise HTTPException(
             status_code=503,
@@ -290,6 +292,7 @@ def api_run(request: Request, body: RunRequest) -> dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
+        _log.exception("ui run failed")
         raise HTTPException(status_code=502, detail="run failed") from e
 
 
