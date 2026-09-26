@@ -3,8 +3,7 @@ import Lenis from 'lenis'
 export const GITHUB = 'https://github.com/himxsh/Cascade'
 export const LICENSE = 'https://github.com/himxsh/Cascade/blob/main/LICENSE'
 
-export const PIP =
-  'pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"'
+export const PIP = 'pip install cascade-bot'
 
 export async function copyText(text: string): Promise<boolean> {
   try {

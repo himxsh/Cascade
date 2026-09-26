@@ -1,31 +1,56 @@
+import { useEffect, useState } from 'react'
 import { GhComment, GhDiff, GhPull } from './Gh'
 import { InstallPanel } from './InstallPanel'
 import { Link } from './Link'
 import { Mark } from './Mark'
+import { copyText, PIP } from './site'
 
 const COMPAT = ['Python 3.11+', 'GitHub Actions', 'DataHub', 'SQL or dbt']
 
 export function Home() {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) return
+    const id = window.setTimeout(() => setCopied(false), 1600)
+    return () => window.clearTimeout(id)
+  }, [copied])
+
+  const onCopy = async () => {
+    const ok = await copyText(PIP)
+    if (ok) setCopied(true)
+  }
+
   return (
     <>
-      <section className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-8 px-5 pb-12 pt-10 sm:px-6 lg:min-h-[calc(100dvh-4.75rem)] lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.18fr)] lg:items-center lg:gap-8 lg:pt-12">
-        <div className="hero-copy">
-          <h1 className="display max-w-[20ch] pb-1 text-[clamp(2.15rem,5.4vw,3.5rem)] leading-[1.15]">
+      <section className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-10 px-5 pb-14 pt-12 sm:px-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.88fr)] lg:gap-x-16 lg:pb-16 lg:pt-16">
+        <div className="hero-copy lg:pt-1">
+          <h1 className="display max-w-[18ch] text-[clamp(2.35rem,4.8vw,3.6rem)] leading-[1.12]">
             Keep downstream SQL aligned with the schema.
           </h1>
-          <p className="mt-5 max-w-[42ch] text-[1.05rem] leading-relaxed text-mute">
+          <p className="mt-6 max-w-[40ch] text-[1.125rem] leading-[1.7] text-frost/70">
             On a schema PR, Cascade uses DataHub to find models still on the old
             schema and comments what is affected. A stacked PR is opt-in. No
             warehouse connection.
           </p>
-        </div>
-        <div className="hero-slab">
-          <div className="lg:-translate-x-16">
-            <div className="mb-5 flex justify-center">
-              <Mark className="h-auto w-[min(100%,240px)] lg:w-[min(100%,292px)]" animate />
-            </div>
-            <InstallPanel />
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="btn btn-ember"
+              onClick={() => void onCopy()}
+            >
+              {copied ? 'Copied' : 'Copy install command'}
+            </button>
+            <Link href="/docs" className="btn btn-ghost">
+              Read the docs
+            </Link>
           </div>
+        </div>
+        <div className="hero-slab lg:pt-1">
+          <div className="mb-6 flex justify-start">
+            <Mark className="h-auto w-[min(100%,148px)]" animate />
+          </div>
+          <InstallPanel copied={copied} onCopy={() => void onCopy()} />
         </div>
       </section>
 
