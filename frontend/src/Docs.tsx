@@ -75,10 +75,12 @@ function DocBody({ id }: { id: DocId }) {
             </li>
             <li>
               <p className="font-semibold">Create the config files</p>
-              <GhCode file="terminal">cascade init</GhCode>
+              <GhCode file="terminal">cascade setup</GhCode>
               <P>
                 This adds a config file, an example secrets file, and a GitHub
-                workflow. It will not write a real .env with passwords.
+                workflow. It can probe DataHub and set Actions secrets. Use
+                --demo if you do not have DataHub yet. It will not write a real
+                .env with passwords.
               </P>
             </li>
             <li>
@@ -111,7 +113,7 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
           <GhCode file="terminal">{PIP}</GhCode>
           <P>
             That installs cascade-bot from PyPI (latest published release; the
-            current one is {VERSION}). Then run cascade init in your repo. That
+            current one is {VERSION}). Then run cascade setup in your repo. That
             writes the config, an example secrets file, and the GitHub workflow.
             In GitHub Actions, pin a version. Do not install from main.
           </P>
@@ -213,7 +215,7 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
             LLM_API_KEY. Pin the install to a version, not main.
           </P>
           <P>
-            cascade init writes the workflow file. You can also download it.
+            cascade setup writes the workflow file. You can also download it.
           </P>
           <p className="mt-6">
             <Link href="/cascade.yml" download="cascade.yml" className="btn btn-ember">
@@ -275,8 +277,13 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
           <P>After install, cascade --help and cascade --version should work.</P>
           <ul className="mt-6 max-w-[65ch] space-y-3 text-mute">
             <li>
-              <span className="font-semibold text-frost">init</span> adds config,
-              an example secrets file, and the GitHub workflow.
+              <span className="font-semibold text-frost">setup</span> is
+              first-time setup: config, workflow, DataHub probe, optional
+              GitHub secrets. --demo skips live DataHub.
+            </li>
+            <li>
+              <span className="font-semibold text-frost">init</span> only writes
+              the config, example secrets file, and GitHub workflow.
             </li>
             <li>
               <span className="font-semibold text-frost">doctor</span> checks

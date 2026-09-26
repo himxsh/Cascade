@@ -118,6 +118,19 @@ GET_ML_MODEL = """query getMlModel($urn: String!) {
   }
 }"""
 
+SEARCH_DATASETS = """query searchDatasets($query: String!, $count: Int!) {
+  searchAcrossEntities(input: {
+    types: [DATASET]
+    query: $query
+    start: 0
+    count: $count
+  }) {
+    searchResults {
+      entity { urn }
+    }
+  }
+}"""
+
 
 _use_fgl = True
 
@@ -196,6 +209,35 @@ def fetch_downstream_lineage(
         if start + len(hits) >= (page.get("total") or 0) or len(hits) < count:
             break
         start += count
+    return urns
+
+
+def search_dataset_urns(
+    query: str,
+    *,
+    gms_url: str | None = None,
+    token: str | None = None,
+    count: int = 10,
+) -> list[str]:
+    """Best-effort dataset URN search. Empty on any GMS/GraphQL failure."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    url = gms_url or _gms_url()
+    tok = token or _gms_token()
+    try:
+        result = _graphql(url, SEARCH_DATASETS, {"query": q, "count": count}, tok)
+    except Exception:
+        return []
+    hits = (result.get("data") or {}).get("searchAcrossEntities") or {}
+    urns: list[str] = []
+    seen: set[str] = set()
+    for row in hits.get("searchResults") or []:
+        entity = row.get("entity") or {}
+        urn = entity.get("urn")
+        if urn and urn not in seen:
+            seen.add(urn)
+            urns.append(urn)
     return urns
 
 
