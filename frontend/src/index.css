@@ -123,6 +123,40 @@
     line-height: 20px;
   }
 
+  .gh-term-chip {
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .gh-term {
+    margin: 0;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0.625rem 0.875rem;
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, 'SF Mono',
+      Menlo, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    font-variant-ligatures: none;
+    letter-spacing: -0.012em;
+    line-height: 1.45;
+    tab-size: 2;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+
+  .gh-term code {
+    display: grid;
+    gap: 0.4em;
+    font: inherit;
+  }
+
+  .gh-term-line {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .display {
     font-family: var(--font-display);
     font-weight: 400;
