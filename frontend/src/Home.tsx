@@ -1,26 +1,11 @@
-import { useEffect, useState } from 'react'
 import { GhComment, GhDiff, GhPull } from './Gh'
 import { InstallPanel } from './InstallPanel'
 import { Link } from './Link'
 import { Mark } from './Mark'
-import { copyText, PIP } from './site'
 
 const COMPAT = ['Python 3.11+', 'GitHub Actions', 'DataHub', 'SQL or dbt']
 
 export function Home() {
-  const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    if (!copied) return
-    const id = window.setTimeout(() => setCopied(false), 1600)
-    return () => window.clearTimeout(id)
-  }, [copied])
-
-  const onCopy = async () => {
-    const ok = await copyText(PIP)
-    if (ok) setCopied(true)
-  }
-
   return (
     <>
       <section className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-10 px-5 pb-14 pt-12 sm:px-6 lg:grid-cols-[minmax(0,1.18fr)_minmax(0,0.9fr)] lg:items-center lg:gap-x-16 lg:pb-16 lg:pt-16">
@@ -33,16 +18,9 @@ export function Home() {
             schema and comments what is affected. A stacked PR is opt-in. No
             warehouse connection.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              className="btn btn-ember"
-              onClick={() => void onCopy()}
-            >
-              {copied ? 'Copied' : 'Copy install command'}
-            </button>
+          <div className="mt-8">
             <Link href="/docs" className="btn btn-ghost">
-              Read the docs
+              Docs
             </Link>
           </div>
         </div>
@@ -50,7 +28,7 @@ export function Home() {
           <div className="flex flex-col items-center">
             <Mark className="mb-5 h-auto w-28 sm:w-32 lg:w-[11rem]" animate />
             <div className="w-full">
-              <InstallPanel copied={copied} onCopy={() => void onCopy()} />
+              <InstallPanel />
             </div>
           </div>
         </div>

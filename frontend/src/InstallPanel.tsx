@@ -1,33 +1,97 @@
-import { PIP } from './site'
+import { useEffect, useState } from 'react'
+import { copyText, PIP } from './site'
 
-export function InstallPanel({
-  copied,
-  onCopy,
-}: {
-  copied: boolean
-  onCopy: () => void
-}) {
+function CopyGlyph() {
   return (
-    <div className="slab">
-      <div className="p-5 sm:p-6">
-        <p className="mb-3 text-[0.95rem] leading-relaxed text-frost/70">
-          Install the cascade CLI. Python 3.11+.
-        </p>
-        <button
-          type="button"
-          className="flex w-full items-start gap-3 rounded-[10px] bg-void px-4 py-3.5 text-left transition-colors hover:bg-black"
-          onClick={onCopy}
-          aria-label={copied ? 'Copied install command' : 'Copy install command'}
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      aria-hidden="true"
+    >
+      <rect
+        x="5.25"
+        y="5.25"
+        width="7.5"
+        height="7.5"
+        rx="1.25"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
+      <path
+        d="M10.5 5.25V3.75A1.25 1.25 0 0 0 9.25 2.5H3.75A1.25 1.25 0 0 0 2.5 3.75v5.5A1.25 1.25 0 0 0 3.75 10.5h1.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
+    </svg>
+  )
+}
+
+function CheckGlyph() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M3.25 8.25 6.5 11.5 12.75 4.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+export function InstallPanel() {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) return
+    const id = window.setTimeout(() => setCopied(false), 1600)
+    return () => window.clearTimeout(id)
+  }, [copied])
+
+  const onCopy = async () => {
+    const ok = await copyText(PIP)
+    if (ok) setCopied(true)
+  }
+
+  return (
+    <div className="w-full">
+      <p className="mb-2.5 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-mute">
+        Install · Python 3.11+
+      </p>
+      <button
+        type="button"
+        className="group flex w-full items-start gap-3 rounded-lg border border-frost/[0.1] bg-ink px-4 py-3 text-left transition-colors hover:border-frost/20 hover:bg-void"
+        onClick={() => void onCopy()}
+        aria-label={copied ? 'Copied install command' : 'Copy install command'}
+      >
+        <span className="cmd select-none pt-px text-ember/80" aria-hidden="true">
+          $
+        </span>
+        <code className="cmd min-w-0 flex-1 whitespace-pre-wrap break-all text-[0.8125rem] leading-relaxed text-frost">
+          {PIP}
+        </code>
+        <span
+          className={[
+            'mt-px flex shrink-0 items-center gap-1.5 text-[0.68rem] tracking-wide',
+            copied
+              ? 'text-ember'
+              : 'text-mute/80 transition-colors group-hover:text-frost',
+          ].join(' ')}
+          aria-live="polite"
         >
-          <pre className="cmd min-w-0 flex-1 whitespace-pre-wrap break-all text-[0.8125rem] leading-relaxed text-frost">
-            <span className="select-none text-mute">$ </span>
-            <code>{PIP}</code>
-          </pre>
-          <span className="shrink-0 pt-0.5 text-sm font-semibold text-mute">
-            {copied ? 'Copied' : 'Copy'}
-          </span>
-        </button>
-      </div>
+          {copied ? <CheckGlyph /> : <CopyGlyph />}
+          {copied ? 'Copied' : 'Copy'}
+        </span>
+      </button>
     </div>
   )
 }
