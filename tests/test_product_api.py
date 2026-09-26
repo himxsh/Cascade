@@ -65,20 +65,63 @@ class TestProductApi(unittest.TestCase):
         reset_bootstrap_cache()
         self.tmp.cleanup()
 
-    def test_health_and_demo_diff(self) -> None:
+    def test_anonymous_health_is_minimal(self) -> None:
         health = self.client.get("/api/health")
         self.assertEqual(health.status_code, 200)
-        body = health.json()
+        self.assertEqual(health.json(), {"ok": True})
+
+    def test_authenticated_health_includes_infra(self) -> None:
+        self.client.get("/auth/dev-login", follow_redirects=False)
+        body = self.client.get("/api/health").json()
         self.assertTrue(body["ok"])
         self.assertIn("gms", body)
         self.assertTrue(body["db"])
+
+    def test_demo_diff_omits_filesystem_path(self) -> None:
         demo = self.client.get("/api/demo-diff")
         self.assertEqual(demo.status_code, 200)
-        self.assertIn("diff", demo.json())
+        body = demo.json()
+        self.assertIn("diff", body)
+        self.assertNotIn("path", body)
+
+    def test_anonymous_auth_config_is_minimal(self) -> None:
+        cfg = self.client.get("/api/auth/config").json()
+        self.assertFalse(cfg["oauth_configured"])
+        self.assertTrue(cfg["dev_login"])
+        self.assertNotIn("banner", cfg)
+        self.assertNotIn("app_slug", cfg)
+        self.assertNotIn("app_configured", cfg)
+        blob = json.dumps(cfg)
+        self.assertNotIn("GITHUB_", blob)
+        self.assertNotIn("mock", blob.lower())
+
+    def test_marketing_docs_not_swagger(self) -> None:
+        self.assertIsNone(self.app.docs_url)
+        self.assertIsNone(self.app.redoc_url)
+        self.assertIsNone(self.app.openapi_url)
+        self.assertEqual(self.client.get("/openapi.json").status_code, 404)
+        self.assertEqual(self.client.get("/redoc").status_code, 404)
+        self.assertEqual(self.client.get("/api/swagger").status_code, 404)
+        self.assertEqual(self.client.get("/api/redoc").status_code, 404)
+        self.assertEqual(self.client.get("/api/internal/openapi.json").status_code, 404)
+        docs = self.client.get("/docs")
+        self.assertNotIn("swagger-ui", docs.text.lower())
+        self.assertNotIn("Cascade UI API", docs.text)
 
     def test_run_rejects_bad_diff(self) -> None:
-        res = self.client.post("/api/run", json={"diff": "{not-json"})
+        with mock.patch.dict(os.environ, {"VERCEL": ""}, clear=False):
+            res = self.client.post("/api/run", json={"diff": "{not-json"})
         self.assertIn(res.status_code, {400, 502})
+        self.assertNotIn("/var/", res.text)
+        self.assertNotIn("cascade/runs", res.text)
+
+    def test_run_requires_auth_on_vercel(self) -> None:
+        with mock.patch.dict(os.environ, {"VERCEL": "1"}, clear=False):
+            denied = self.client.post("/api/run", json={"diff": "{not-json"})
+            self.assertEqual(denied.status_code, 401)
+            self.client.get("/auth/dev-login", follow_redirects=False)
+            authed = self.client.post("/api/run", json={"diff": "{not-json"})
+            self.assertIn(authed.status_code, {400, 502})
 
     def test_me_unauthorized(self) -> None:
         res = self.client.get("/api/me")
@@ -95,6 +138,8 @@ class TestProductApi(unittest.TestCase):
         self.assertEqual(me.json()["login"], "dev")
         self.assertTrue(me.json()["dev"])
         self.assertIsNotNone(me.json()["banner"])
+        self.assertNotIn("GITHUB_APP", me.json()["banner"] or "")
+        self.assertNotIn("SESSION_SECRET", me.json()["banner"] or "")
 
         cfg = self.client.get("/api/auth/config")
         self.assertTrue(cfg.json()["dev_login"])

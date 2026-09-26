@@ -2,7 +2,10 @@ import Lenis from 'lenis'
 
 export const GITHUB = 'https://github.com/himxsh/Cascade'
 export const LICENSE = 'https://github.com/himxsh/Cascade/blob/main/LICENSE'
+export const CONTRIBUTING =
+  'https://github.com/himxsh/Cascade/blob/main/CONTRIBUTING.md'
 
+export const VERSION = '0.1.0'
 export const PIP = 'pip install cascade-bot'
 
 export async function copyText(text: string): Promise<boolean> {

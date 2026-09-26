@@ -254,18 +254,13 @@ export function Dashboard({ me }: { me: Me }) {
             </a>
           ) : (
             <p className="slab px-4 py-3 text-sm text-mute">
-              GITHUB_APP_SLUG is not set, so there is no install URL yet. After
-              you create the App on github.com, set the slug and secrets from
-              .env.example. The setup callback at /api/github/setup will store
-              the installation id.
+              The GitHub App install URL is not available on this site yet. You
+              can still enable sample repositories, or run Cascade with the
+              GitHub Action in your own repo.
             </p>
           )}
-          <p className="text-sm text-mute">
-            Setup URL for the App registration:{' '}
-            <code className="cmd text-frost">/api/github/setup</code>
-          </p>
-          <Link href="/docs/github-app" className="text-frost underline decoration-ember/70 underline-offset-4">
-            GitHub App (when ready)
+          <Link href="/docs/action" className="text-frost underline decoration-ember/70 underline-offset-4">
+            GitHub Action docs
           </Link>
         </section>
       ) : null}

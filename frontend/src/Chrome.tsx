@@ -29,17 +29,23 @@ export function Chrome({
               Cascade
             </span>
           </Link>
-          <nav className="ml-auto flex items-center gap-1 text-sm font-medium">
+          <nav className="ml-auto flex items-center gap-0.5 text-sm font-medium sm:gap-1">
             <Link
               href="/docs"
               className={[
-                'rounded-full px-3 py-2',
+                'rounded-full px-2 py-2 sm:px-3',
                 docsOn ? 'text-frost' : 'text-mute hover:text-frost',
               ].join(' ')}
             >
               Docs
             </Link>
-            <Link href="/changelog" className="hidden rounded-full px-3 py-2 text-mute hover:text-frost sm:inline">
+            <Link
+              href="/changelog"
+              className={[
+                'rounded-full px-2 py-2 sm:px-3',
+                path === '/changelog' ? 'text-frost' : 'text-mute hover:text-frost',
+              ].join(' ')}
+            >
               Changelog
             </Link>
             {authReady && me ? (
@@ -55,10 +61,10 @@ export function Chrome({
             ) : null}
             <Link
               href={GITHUB}
-              className="btn btn-ghost ml-1 h-9 min-h-0 gap-1.5 px-3 py-0 text-sm"
+              className="btn btn-ghost ml-1 h-9 min-h-0 gap-1.5 px-2 py-0 text-sm sm:px-3"
             >
               <GitHubMark />
-              GitHub
+              <span className="sr-only sm:not-sr-only sm:inline">GitHub</span>
             </Link>
             {authReady && me ? (
               <>
@@ -79,7 +85,10 @@ export function Chrome({
               </>
             ) : null}
             {authReady && !me ? (
-              <Link href="/signin" className="btn btn-ember ml-1 h-9 min-h-0 px-3 py-0 text-sm">
+              <Link
+                href="/signin"
+                className="rounded-full px-2 py-2 text-mute hover:text-frost sm:px-3"
+              >
                 Sign in
               </Link>
             ) : null}

@@ -17,6 +17,7 @@ class TestUiRun(unittest.TestCase):
         self.assertEqual(demo["urn"], DEFAULT_URN)
         self.assertTrue(Path(DEFAULT_DIFF).is_file())
         self.assertIn("FIELD_RENAMED", demo["diff"])
+        self.assertNotIn("path", demo)
 
     def test_fixture_pipeline_impact_report_shape(self) -> None:
         demo = load_demo_diff()

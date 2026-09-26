@@ -27,6 +27,20 @@ cascade doctor
 
 `doctor` is useful for live DataHub work. Unit tests do not need it.
 
+## Hosted dashboard (operators)
+
+The marketing site and dashboard in `frontend/` and `api/` are optional. The CLI and GitHub Action do not read these variables.
+
+Copy `.env.example` to `.env` on your laptop. Do not put App private keys or OAuth secrets in the frontend bundle.
+
+- `DATABASE_URL` — SQLite locally (`sqlite:///./cascade.db`). On Vercel `/tmp` is ephemeral, so use `postgres://` or `libsql://` if sessions must survive cold starts.
+- `SESSION_SECRET` — required in production.
+- `CASCADE_DEV_LOGIN=1` — local test session at `/auth/dev-login`. Never enable on a public deploy.
+- GitHub OAuth: `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`.
+- GitHub App: `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`.
+
+Public API schema (Swagger / ReDoc / OpenAPI) is off by default so marketing `/docs` stays the product docs. Set `CASCADE_API_DOCS=1` locally to serve Swagger at `/api/swagger` and ReDoc at `/api/redoc`.
+
 ## Tests
 
 CI runs this, and so should you before a PR:
