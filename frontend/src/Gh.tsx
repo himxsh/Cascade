@@ -189,6 +189,23 @@ export function GhPull() {
   )
 }
 
+function TerminalLine({ line }: { line: string }) {
+  const parts = (line || ' ').split(/(\s+)/)
+  return (
+    <span className="gh-term-line">
+      {parts.map((part, i) =>
+        part.trim() === '' ? (
+          part
+        ) : (
+          <span key={i} className="gh-term-token">
+            {part}
+          </span>
+        ),
+      )}
+    </span>
+  )
+}
+
 export function GhCode({
   file,
   children,
@@ -198,6 +215,23 @@ export function GhCode({
 }) {
   const lines = children.replace(/\n$/, '').split('\n')
   const numbered = file != null && file !== 'terminal'
+
+  if (file === 'terminal') {
+    return (
+      <div className="gh gh-term-chip mt-5">
+        <div className="flex items-center border-b border-[#30363d] bg-[#161b22] px-3 py-1.5 text-[11px] leading-none text-[#8b949e]">
+          terminal
+        </div>
+        <pre className="gh-term text-[#e6edf3]">
+          <code>
+            {lines.map((line, i) => (
+              <TerminalLine key={i} line={line} />
+            ))}
+          </code>
+        </pre>
+      </div>
+    )
+  }
 
   return (
     <div className="gh mt-5">

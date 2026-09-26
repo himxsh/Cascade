@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from typing import Any, Literal
@@ -29,6 +30,7 @@ from api.github_app import (
     user_may_claim_installation,
 )
 from api.settings import (
+    api_docs_enabled,
     app_configured,
     app_install_url,
     app_slug,
@@ -63,6 +65,7 @@ from api.webhook import (
     repo_fields,
     verify_signature,
 )
+from cascade import __version__ as CASCADE_VERSION
 from cascade.datahub_live import health_check
 from cascade.demo import DEFAULT_URN
 from cascade.dotenv_load import load_dotenv
@@ -86,11 +89,11 @@ _FAVICON_SVG = (
 
 SESSION_COOKIE_MAX_AGE = 30 * 24 * 3600
 APP_NOT_READY_BANNER = (
-    "The Cascade GitHub App is not registered yet. Create it on your laptop "
-    "(see Docs → GitHub App), then set GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, "
-    "GITHUB_APP_SLUG, and GITHUB_WEBHOOK_SECRET. Until then this dashboard uses "
-    "a mock repository list; workers will not comment as the App."
+    "The Cascade GitHub App is not connected on this site yet. "
+    "The dashboard uses a sample repository list until the App is registered."
 )
+_API_DOCS = api_docs_enabled()
+_log = logging.getLogger("cascade.api")
 
 
 def _static_file(relative: str) -> Path | None:
@@ -142,7 +145,13 @@ def _cors_origins() -> list[str]:
     return origins
 
 
-app = FastAPI(title="Cascade UI API", version="0.1.0")
+app = FastAPI(
+    title="Cascade UI API",
+    version=CASCADE_VERSION,
+    docs_url="/api/swagger" if _API_DOCS else None,
+    redoc_url="/api/redoc" if _API_DOCS else None,
+    openapi_url="/api/internal/openapi.json" if _API_DOCS else None,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
@@ -195,6 +204,8 @@ def _clear_session_cookie(response: Response, request: Request) -> None:
 
 def _current_user(request: Request) -> dict[str, Any] | None:
     token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return None
     with get_conn() as conn:
         return get_session_user(conn, token)
 
@@ -241,7 +252,9 @@ def _login_and_redirect(request: Request, user_fields: dict[str, Any], next_path
 
 
 @app.get("/api/health")
-def api_health() -> dict[str, Any]:
+def api_health(request: Request) -> dict[str, Any]:
+    if _current_user(request) is None:
+        return {"ok": True}
     db_ok = False
     try:
         with get_conn() as conn:
@@ -249,10 +262,9 @@ def api_health() -> dict[str, Any]:
         db_ok = True
     except Exception:
         db_ok = False
-    gms_ok = health_check()
     return {
         "ok": True,
-        "gms": gms_ok,
+        "gms": health_check(),
         "ui": (_STATIC / "index.html").is_file(),
         "db": db_ok,
     }
@@ -264,11 +276,12 @@ def api_demo_diff() -> dict[str, Any]:
 
 
 @app.post("/api/run")
-def api_run(body: RunRequest) -> dict[str, Any]:
+def api_run(request: Request, body: RunRequest) -> dict[str, Any]:
+    _require_user(request)
     if body.source == "live" and not health_check():
         raise HTTPException(
             status_code=503,
-            detail="DataHub GMS is unreachable. Set DATAHUB_GMS_URL or use source=fixture.",
+            detail="DataHub is unreachable. Use source=fixture, or try again later.",
         )
     try:
         return run_ui_pipeline(
@@ -279,14 +292,20 @@ def api_run(body: RunRequest) -> dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        _log.exception("ui run failed")
+        raise HTTPException(status_code=502, detail="run failed") from e
 
 
 @app.get("/api/auth/config")
-def api_auth_config() -> dict[str, Any]:
-    return {
+def api_auth_config(request: Request) -> dict[str, Any]:
+    public = {
         "oauth_configured": oauth_configured(),
         "dev_login": dev_login_enabled(),
+    }
+    if _current_user(request) is None:
+        return public
+    return {
+        **public,
         "app_configured": app_configured(),
         "app_slug": app_slug() or None,
         "app_install_url": app_install_url(),
@@ -582,6 +601,9 @@ def spa_fallback(full_path: str) -> FileResponse:
     if full_path == "api" or full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="not found")
     if full_path == "auth" or full_path.startswith("auth/"):
+        raise HTTPException(status_code=404, detail="not found")
+    # Default FastAPI schema paths stay unpublished even when CASCADE_API_DOCS=1.
+    if full_path.rstrip("/") in {"redoc", "openapi.json", "openapi.yaml"}:
         raise HTTPException(status_code=404, detail="not found")
     existing = _static_file(full_path)
     if existing is not None:

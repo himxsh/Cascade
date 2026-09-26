@@ -1,27 +1,30 @@
 import { Link } from './Link'
+import { VERSION } from './site'
 
 export function Changelog() {
   return (
     <article className="mx-auto max-w-[65ch] px-5 py-14 sm:px-6">
       <h1 className="display text-[clamp(2rem,4vw,2.75rem)]">Changelog</h1>
       <p className="mt-4 text-mute">
-        Versions look like v0.1.0. The homepage install uses the latest stable
-        release. Pin a version in GitHub Actions.
+        Versions match the cascade-bot package on PyPI. The current release is{' '}
+        {VERSION}. Pin a version in GitHub Actions.
       </p>
       <section className="mt-12">
-        <h2 className="text-xl font-semibold">Unreleased</h2>
-        <ul className="mt-4 space-y-2 text-mute">
-          <li>GitHub sign-in and an auth-gated dashboard to enable repos.</li>
-          <li>Webhook receiver with HMAC verification (no live App comments yet).</li>
-        </ul>
-      </section>
-      <section className="mt-12">
-        <h2 className="text-xl font-semibold">0.1.0</h2>
-        <ul className="mt-4 space-y-2 text-mute">
-          <li>Commands: impact, generate, apply, policy, init, doctor, demo.</li>
+        <h2 className="display text-[1.75rem] leading-tight">{VERSION}</h2>
+        <p className="mt-1 text-sm text-mute">First public release</p>
+        <ul className="mt-5 list-disc space-y-2 pl-5 text-mute marker:text-ember">
+          <li>CLI commands: impact, generate, apply, policy, init, doctor, demo.</li>
           <li>GitHub Action workflow you can copy into your repo.</li>
-          <li>Install from git with pip.</li>
-          <li>By default it only writes local files. It will not open a GitHub pull request until you ask.</li>
+          <li>
+            Install with <code className="cmd text-frost">pip install cascade-bot</code>.
+          </li>
+          <li>
+            Optional GitHub sign-in dashboard to enable repositories.
+          </li>
+          <li>
+            By default it only writes local files. It will not open a GitHub
+            pull request until you ask.
+          </li>
         </ul>
       </section>
     </article>
@@ -46,8 +49,8 @@ export function Security() {
       <p className="mt-3 text-mute">
         DataHub and AI keys stay in your GitHub secrets and local .env. cascade
         init only writes an example file. AI edits cannot invent column names.
-        The GitHub App private key, OAuth client secret, webhook secret, and
-        SESSION_SECRET stay on the server. They are never sent to the browser.
+        OAuth, App, and session credentials stay on the server. They are never
+        sent to the browser.
       </p>
       <h2 className="mt-10 text-xl font-semibold">What we do not do</h2>
       <p className="mt-3 text-mute">

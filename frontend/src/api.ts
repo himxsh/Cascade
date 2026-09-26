@@ -1,11 +1,11 @@
 export type AuthConfig = {
   oauth_configured: boolean
   dev_login: boolean
-  app_configured: boolean
-  app_slug: string | null
-  app_install_url: string | null
-  webhook_configured: boolean
-  banner: string | null
+  app_configured?: boolean
+  app_slug?: string | null
+  app_install_url?: string | null
+  webhook_configured?: boolean
+  banner?: string | null
 }
 
 export type Me = {

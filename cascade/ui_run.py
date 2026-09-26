@@ -111,7 +111,6 @@ def load_demo_diff() -> dict[str, Any]:
         "urn": DEFAULT_URN,
         "source": "fixture",
         "diff": path.read_text(),
-        "path": str(path),
     }
 
 

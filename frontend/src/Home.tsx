@@ -8,23 +8,28 @@ const COMPAT = ['Python 3.11+', 'GitHub Actions', 'DataHub', 'SQL or dbt']
 export function Home() {
   return (
     <>
-      <section className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-8 px-5 pb-12 pt-10 sm:px-6 lg:min-h-[calc(100dvh-4.75rem)] lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.18fr)] lg:items-center lg:gap-8 lg:pt-12">
+      <section className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-10 px-5 pb-14 pt-12 sm:px-6 lg:grid-cols-[minmax(0,1.18fr)_minmax(0,0.9fr)] lg:items-center lg:gap-x-16 lg:pb-16 lg:pt-16">
         <div className="hero-copy">
-          <h1 className="display max-w-[20ch] pb-1 text-[clamp(2.15rem,5.4vw,3.5rem)] leading-[1.15]">
+          <h1 className="display max-w-[18ch] text-[clamp(2.35rem,4.8vw,3.6rem)] leading-[1.12]">
             Keep downstream SQL aligned with the schema.
           </h1>
-          <p className="mt-5 max-w-[42ch] text-[1.05rem] leading-relaxed text-mute">
+          <p className="mt-6 max-w-[40ch] text-[1.125rem] leading-[1.7] text-frost/70">
             On a schema PR, Cascade uses DataHub to find models still on the old
             schema and comments what is affected. A stacked PR is opt-in. No
             warehouse connection.
           </p>
+          <div className="mt-8">
+            <Link href="/docs" className="btn btn-ghost">
+              Docs
+            </Link>
+          </div>
         </div>
         <div className="hero-slab">
-          <div className="lg:-translate-x-16">
-            <div className="mb-5 flex justify-center">
-              <Mark className="h-auto w-[min(100%,240px)] lg:w-[min(100%,292px)]" animate />
+          <div className="flex flex-col items-center">
+            <Mark className="mb-5 h-auto w-28 sm:w-32 lg:w-[11rem]" animate />
+            <div className="w-full">
+              <InstallPanel />
             </div>
-            <InstallPanel />
           </div>
         </div>
       </section>

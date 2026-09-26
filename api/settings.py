@@ -72,3 +72,8 @@ def cookie_secure(forwarded_proto: str, scheme: str) -> bool:
         return env_flag("CASCADE_COOKIE_SECURE")
     proto = (forwarded_proto or scheme or "").lower()
     return proto == "https"
+
+
+def api_docs_enabled() -> bool:
+    """Swagger/ReDoc/OpenAPI are opt-in so marketing /docs stays the product docs."""
+    return env_flag("CASCADE_API_DOCS")
