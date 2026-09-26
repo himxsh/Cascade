@@ -133,28 +133,37 @@
     margin: 0;
     max-width: 100%;
     min-width: 0;
-    padding: 0.625rem 0.875rem;
+    padding: 0.55rem 0.8rem;
     font-family: var(--font-mono), ui-monospace, SFMono-Regular, 'SF Mono',
       Menlo, Consolas, 'Liberation Mono', monospace;
     font-size: 0.8125rem;
-    font-weight: 500;
+    font-weight: 400;
     font-variant-ligatures: none;
-    letter-spacing: -0.012em;
+    letter-spacing: -0.02em;
     line-height: 1.45;
     tab-size: 2;
     white-space: pre-wrap;
-    overflow-wrap: break-word;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
   }
 
   .gh-term code {
     display: grid;
-    gap: 0.4em;
+    gap: 0.45em;
     font: inherit;
   }
 
   .gh-term-line {
     min-width: 0;
     max-width: 100%;
+    padding-left: 1.15em;
+    text-indent: -1.15em;
+  }
+
+  .gh-term-token {
+    white-space: nowrap;
+    hyphens: none;
   }
 
   .display {

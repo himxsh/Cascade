@@ -59,7 +59,7 @@ function DocBody({ id }: { id: DocId }) {
             You need SQL files in a GitHub repo, and those tables already listed
             in DataHub. Cascade does not copy tables out of your database.
           </P>
-          <ol className="mt-8 max-w-[65ch] space-y-6">
+          <ol className="mt-8 space-y-6">
             <li>
               <p className="font-semibold">Install it</p>
               <P>

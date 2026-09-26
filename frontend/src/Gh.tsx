@@ -189,6 +189,23 @@ export function GhPull() {
   )
 }
 
+function TerminalLine({ line }: { line: string }) {
+  const parts = (line || ' ').split(/(\s+)/)
+  return (
+    <span className="gh-term-line">
+      {parts.map((part, i) =>
+        part.trim() === '' ? (
+          part
+        ) : (
+          <span key={i} className="gh-term-token">
+            {part}
+          </span>
+        ),
+      )}
+    </span>
+  )
+}
+
 export function GhCode({
   file,
   children,
@@ -208,9 +225,7 @@ export function GhCode({
         <pre className="gh-term text-[#e6edf3]">
           <code>
             {lines.map((line, i) => (
-              <span key={i} className="gh-term-line">
-                {line || ' '}
-              </span>
+              <TerminalLine key={i} line={line} />
             ))}
           </code>
         </pre>
