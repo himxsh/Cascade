@@ -20,6 +20,7 @@ export function InstallPanel({
           aria-label={copied ? 'Copied install command' : 'Copy install command'}
         >
           <pre className="cmd min-w-0 flex-1 whitespace-pre-wrap break-all text-[0.8125rem] leading-relaxed text-frost">
+            <span className="select-none text-mute">$ </span>
             <code>{PIP}</code>
           </pre>
           <span className="shrink-0 pt-0.5 text-sm font-semibold text-mute">

@@ -23,8 +23,8 @@ export function Home() {
 
   return (
     <>
-      <section className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-10 px-5 pb-14 pt-12 sm:px-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.88fr)] lg:gap-x-16 lg:pb-16 lg:pt-16">
-        <div className="hero-copy lg:pt-1">
+      <section className="mx-auto grid max-w-[1120px] grid-cols-1 items-start gap-10 px-5 pb-14 pt-12 sm:px-6 lg:grid-cols-[minmax(0,1.18fr)_minmax(0,0.9fr)] lg:items-center lg:gap-x-16 lg:pb-16 lg:pt-16">
+        <div className="hero-copy">
           <h1 className="display max-w-[18ch] text-[clamp(2.35rem,4.8vw,3.6rem)] leading-[1.12]">
             Keep downstream SQL aligned with the schema.
           </h1>
@@ -46,11 +46,13 @@ export function Home() {
             </Link>
           </div>
         </div>
-        <div className="hero-slab lg:pt-1">
-          <div className="mb-6 flex justify-start">
-            <Mark className="h-auto w-[min(100%,148px)]" animate />
+        <div className="hero-slab">
+          <div className="flex flex-col items-center">
+            <Mark className="mb-5 h-auto w-28 sm:w-32 lg:w-[11rem]" animate />
+            <div className="w-full">
+              <InstallPanel copied={copied} onCopy={() => void onCopy()} />
+            </div>
           </div>
-          <InstallPanel copied={copied} onCopy={() => void onCopy()} />
         </div>
       </section>
 
