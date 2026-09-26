@@ -5,8 +5,8 @@ function CopyGlyph() {
   return (
     <svg
       viewBox="0 0 16 16"
-      width="14"
-      height="14"
+      width="13"
+      height="13"
       fill="none"
       aria-hidden="true"
     >
@@ -32,8 +32,8 @@ function CheckGlyph() {
   return (
     <svg
       viewBox="0 0 16 16"
-      width="14"
-      height="14"
+      width="13"
+      height="13"
       fill="none"
       aria-hidden="true"
     >
@@ -63,30 +63,28 @@ export function InstallPanel() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[22.5rem]">
+    <div className="flex justify-center">
       <button
         type="button"
-        className="group flex w-full items-center gap-3 rounded-lg border border-frost/[0.1] bg-ink px-3.5 py-2.5 text-left transition-colors hover:border-frost/20 hover:bg-void"
+        className="group inline-flex h-10 max-w-full items-center gap-2 rounded-lg border border-frost/[0.12] bg-void pl-3 pr-1.5 text-left transition-colors hover:border-frost/25"
         onClick={() => void onCopy()}
         aria-label={copied ? 'Copied install command' : 'Copy install command'}
       >
-        <span className="cmd select-none text-ember/80" aria-hidden="true">
+        <span className="install-cmd select-none text-ember/75" aria-hidden="true">
           $
         </span>
-        <code className="cmd min-w-0 flex-1 whitespace-pre-wrap break-all text-[0.8125rem] leading-relaxed text-frost">
-          {PIP}
-        </code>
+        <code className="install-cmd whitespace-nowrap text-frost">{PIP}</code>
         <span
           className={[
-            'flex shrink-0 items-center gap-1.5 text-[0.68rem] tracking-wide',
+            'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
             copied
               ? 'text-ember'
-              : 'text-mute/80 transition-colors group-hover:text-frost',
+              : 'text-mute/80 transition-colors group-hover:bg-frost/[0.06] group-hover:text-frost',
           ].join(' ')}
           aria-live="polite"
         >
           {copied ? <CheckGlyph /> : <CopyGlyph />}
-          {copied ? 'Copied' : 'Copy'}
+          <span className="sr-only">{copied ? 'Copied' : 'Copy'}</span>
         </span>
       </button>
     </div>
