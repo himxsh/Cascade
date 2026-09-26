@@ -64,9 +64,6 @@ export function InstallPanel() {
 
   return (
     <div className="mx-auto w-full max-w-[22.5rem]">
-      <p className="mb-2.5 text-[0.68rem] font-medium uppercase tracking-[0.16em] text-mute">
-        Install · Python 3.11+
-      </p>
       <button
         type="button"
         className="group flex w-full items-center gap-3 rounded-lg border border-frost/[0.1] bg-ink px-3.5 py-2.5 text-left transition-colors hover:border-frost/20 hover:bg-void"
