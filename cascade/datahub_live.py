@@ -125,6 +125,7 @@ SEARCH_DATASETS = """query searchDatasets($query: String!, $count: Int!) {
     start: 0
     count: $count
   }) {
+    total
     searchResults {
       entity { urn }
     }
@@ -212,6 +213,45 @@ def fetch_downstream_lineage(
     return urns
 
 
+def search_dataset_hits(
+    query: str,
+    *,
+    gms_url: str | None = None,
+    token: str | None = None,
+    count: int = 10,
+) -> tuple[list[str], bool]:
+    """Best-effort dataset URN search. Empty on any GMS/GraphQL failure.
+
+    The bool is True when more catalog hits exist than this page, so a single
+    exact stem match on the page is not unique.
+    """
+    q = (query or "").strip()
+    if not q:
+        return [], False
+    url = gms_url or _gms_url()
+    tok = token or _gms_token()
+    try:
+        result = _graphql(url, SEARCH_DATASETS, {"query": q, "count": count}, tok)
+    except Exception:
+        return [], False
+    hits = (result.get("data") or {}).get("searchAcrossEntities") or {}
+    rows = hits.get("searchResults") or []
+    urns: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        entity = row.get("entity") or {}
+        urn = entity.get("urn")
+        if urn and urn not in seen:
+            seen.add(urn)
+            urns.append(urn)
+    total = hits.get("total")
+    if isinstance(total, int):
+        truncated = total > len(rows)
+    else:
+        truncated = len(rows) >= count
+    return urns, truncated
+
+
 def search_dataset_urns(
     query: str,
     *,
@@ -219,25 +259,9 @@ def search_dataset_urns(
     token: str | None = None,
     count: int = 10,
 ) -> list[str]:
-    """Best-effort dataset URN search. Empty on any GMS/GraphQL failure."""
-    q = (query or "").strip()
-    if not q:
-        return []
-    url = gms_url or _gms_url()
-    tok = token or _gms_token()
-    try:
-        result = _graphql(url, SEARCH_DATASETS, {"query": q, "count": count}, tok)
-    except Exception:
-        return []
-    hits = (result.get("data") or {}).get("searchAcrossEntities") or {}
-    urns: list[str] = []
-    seen: set[str] = set()
-    for row in hits.get("searchResults") or []:
-        entity = row.get("entity") or {}
-        urn = entity.get("urn")
-        if urn and urn not in seen:
-            seen.add(urn)
-            urns.append(urn)
+    urns, _truncated = search_dataset_hits(
+        query, gms_url=gms_url, token=token, count=count
+    )
     return urns
 
 

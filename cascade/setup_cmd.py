@@ -12,7 +12,7 @@ from pathlib import Path
 
 from cascade import __version__
 from cascade.config import CascadeConfig, _urn_stem, load_config, resolve_rewrite_mode
-from cascade.datahub_live import health_check, search_dataset_urns
+from cascade.datahub_live import health_check, search_dataset_hits
 from cascade.dotenv_load import load_dotenv
 
 _TEMPLATES = Path(__file__).resolve().parent / "templates"
@@ -52,11 +52,6 @@ _NEXT_STEPS = [
     "  Open a PR that touches SQL, models, or schema.yml — Cascade will comment.",
     "  Stacked PRs need /cascade stack later.",
 ]
-
-_GH_SECRET_BLOCK = (
-    "printf '%s' \"$DATAHUB_GMS_URL\" | gh secret set DATAHUB_GMS_URL\n"
-    "printf '%s' \"$DATAHUB_TOKEN\" | gh secret set DATAHUB_TOKEN"
-)
 
 
 def _copy_template(name: str, dest: Path, force: bool) -> str:
@@ -101,7 +96,7 @@ def run_init(
     return notes
 
 
-def run_doctor(root: Path | None = None) -> tuple[list[str], int]:
+def run_doctor(root: Path | None = None, *, require_gms: bool = True) -> tuple[list[str], int]:
     root = (root or Path.cwd()).resolve()
     lines: list[str] = [f"cascade {__version__}"]
     rc = 0
@@ -127,15 +122,17 @@ def run_doctor(root: Path | None = None) -> tuple[list[str], int]:
             rc = 1
             cfg = CascadeConfig()
 
-    if cfg.default_urn or cfg.mappings or os.environ.get("CASCADE_SOURCE_URN"):
+    if _has_real_urn(cfg):
         lines.append("ok   URN mapping present")
     else:
-        lines.append("fail no default_urn / mappings / CASCADE_SOURCE_URN")
+        lines.append("fail no real default_urn / mappings / CASCADE_SOURCE_URN")
         rc = 1
 
     gms = os.environ.get("DATAHUB_GMS_URL", "").strip()
     if not gms:
         lines.append("warn DATAHUB_GMS_URL unset (live source will fail)")
+    elif not require_gms:
+        lines.append("warn DATAHUB_GMS_URL set; --demo did not probe GMS")
     elif health_check(gms):
         lines.append(f"ok   GMS {gms}")
     else:
@@ -161,20 +158,39 @@ def run_doctor(root: Path | None = None) -> tuple[list[str], int]:
     return lines, rc
 
 
-def _is_git_repo(root: Path) -> bool:
-    git = root / ".git"
-    if git.is_dir() or git.is_file():
+def _is_placeholder_urn(urn: str) -> bool:
+    return any(marker in urn for marker in _PLACEHOLDER_MARKERS)
+
+
+def _has_real_urn(cfg: CascadeConfig) -> bool:
+    if os.environ.get("CASCADE_SOURCE_URN", "").strip():
         return True
+    if cfg.default_urn and not _is_placeholder_urn(cfg.default_urn):
+        return True
+    return any(not _is_placeholder_urn(urn) for _path, urn in cfg.mappings)
+
+
+def _resolve_git_root(start: Path) -> Path | None:
     try:
         proc = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
+            ["git", "-C", str(start), "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
             timeout=5,
         )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return Path(proc.stdout.strip()).resolve()
     except (OSError, subprocess.TimeoutExpired):
-        return False
-    return proc.returncode == 0 and proc.stdout.strip() == "true"
+        pass
+    cur = start.resolve()
+    for _ in range(48):
+        git = cur / ".git"
+        if git.is_dir() or git.is_file():
+            return cur
+        if cur.parent == cur:
+            break
+        cur = cur.parent
+    return None
 
 
 def _scan_sql_signals(root: Path) -> tuple[list[Path], bool]:
@@ -205,10 +221,6 @@ def _can_prompt(non_interactive: bool, prompt: Callable[[str], str] | None) -> b
     return bool(sys.stdin.isatty())
 
 
-def _is_placeholder_urn(urn: str) -> bool:
-    return any(marker in urn for marker in _PLACEHOLDER_MARKERS)
-
-
 def _apply_config_suggestions(
     config_path: Path,
     *,
@@ -235,10 +247,12 @@ def _apply_config_suggestions(
             continue
         items.append({"path": path, "urn": urn})
         seen_paths.add(path)
-    if default_urn and (
-        replace_placeholders or _is_placeholder_urn(str(data.get("default_urn") or ""))
-    ):
-        data["default_urn"] = default_urn
+    existing_default = str(data.get("default_urn") or "")
+    if default_urn:
+        if not existing_default or _is_placeholder_urn(existing_default):
+            data["default_urn"] = default_urn
+    elif mappings and _is_placeholder_urn(existing_default):
+        data.pop("default_urn", None)
     data["mappings"] = items
     config_path.write_text(json.dumps(data, indent=2) + "\n")
 
@@ -251,7 +265,7 @@ def _match_stem(stem: str, urns: list[str]) -> list[str]:
 def _suggest_from_files(
     root: Path,
     sql_files: list[Path],
-    lookup: Callable[[str], list[str]],
+    lookup: Callable[[str], tuple[list[str], bool]],
 ) -> tuple[list[str], list[tuple[str, str]], str | None]:
     notes: list[str] = []
     mappings: list[tuple[str, str]] = []
@@ -265,8 +279,13 @@ def _suggest_from_files(
         if len(stem) < 2:
             unmatched.append(rel)
             continue
-        exact = _match_stem(stem, lookup(stem))
-        if len(exact) == 1:
+        urns, truncated = lookup(stem)
+        exact = _match_stem(stem, urns)
+        if truncated and len(exact) <= 1:
+            if exact:
+                notes.append(f"ambiguous {rel} (catalog search truncated)")
+            unmatched.append(rel)
+        elif len(exact) == 1:
             mappings.append((rel, exact[0]))
             notes.append(f"matched {rel}")
         elif len(exact) > 1:
@@ -277,33 +296,41 @@ def _suggest_from_files(
     if unmatched:
         notes.append("unmapped: " + ", ".join(unmatched))
         notes.append("TODO: set path→URN mappings in .cascade/config.json")
-    default_urn = mappings[0][1] if mappings else None
+    default_urn: str | None = None
+    if mappings and not unmatched:
+        unique = {urn for _path, urn in mappings}
+        if len(unique) == 1:
+            default_urn = next(iter(unique))
     return notes, mappings, default_urn
 
 
-def _demo_lookup(stem: str) -> list[str]:
+def _demo_lookup(stem: str) -> tuple[list[str], bool]:
     urn = _DEMO_URNS.get(stem.lower())
-    return [urn] if urn else []
+    return ([urn] if urn else []), False
 
 
-def _live_lookup(gms_url: str, token: str | None) -> Callable[[str], list[str]]:
+def _live_lookup(gms_url: str, token: str | None) -> Callable[[str], tuple[list[str], bool]]:
     # ponytail: searchAcrossEntities per SQL stem (count=10), not a full catalog dump
-    def lookup(stem: str) -> list[str]:
-        return search_dataset_urns(stem, gms_url=gms_url, token=token, count=10)
+    def lookup(stem: str) -> tuple[list[str], bool]:
+        return search_dataset_hits(stem, gms_url=gms_url, token=token, count=10)
 
     return lookup
 
 
-def _gh_secret_help() -> list[str]:
+def _gh_secret_help(token: str | None = None) -> list[str]:
+    block = "printf '%s' \"$DATAHUB_GMS_URL\" | gh secret set DATAHUB_GMS_URL"
+    if token:
+        block += "\nprintf '%s' \"$DATAHUB_TOKEN\" | gh secret set DATAHUB_TOKEN"
     return [
         "Set Actions secrets (values stay in your shell):",
-        _GH_SECRET_BLOCK,
+        block,
     ]
 
 
 def _try_set_gh_secrets(root: Path, url: str, token: str | None) -> list[str]:
+    help_lines = _gh_secret_help(token)
     if not shutil.which("gh"):
-        return _gh_secret_help()
+        return help_lines
     try:
         auth = subprocess.run(
             ["gh", "auth", "status"],
@@ -313,9 +340,9 @@ def _try_set_gh_secrets(root: Path, url: str, token: str | None) -> list[str]:
             timeout=10,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return _gh_secret_help()
+        return help_lines
     if auth.returncode != 0:
-        return _gh_secret_help()
+        return help_lines
 
     notes: list[str] = []
     pairs = [("DATAHUB_GMS_URL", url)]
@@ -332,9 +359,9 @@ def _try_set_gh_secrets(root: Path, url: str, token: str | None) -> list[str]:
                 timeout=20,
             )
         except (OSError, subprocess.TimeoutExpired):
-            return notes + _gh_secret_help()
+            return notes + help_lines
         if proc.returncode != 0:
-            return notes + _gh_secret_help()
+            return notes + help_lines
         notes.append(f"set GitHub secret {name}")
     return notes
 
@@ -347,13 +374,17 @@ def run_setup(
     skip_secrets: bool = False,
     prompt: Callable[[str], str] | None = None,
 ) -> tuple[list[str], int]:
-    root = (root or Path.cwd()).resolve()
-    load_dotenv(root / ".env")
+    start = (root or Path.cwd()).resolve()
     lines: list[str] = []
     ask = prompt or input
 
-    if not _is_git_repo(root):
-        return [f"cascade setup: not a git repository ({root})"], 1
+    git_root = _resolve_git_root(start)
+    if git_root is None:
+        return [f"cascade setup: not a git repository ({start})"], 1
+    if git_root != start:
+        lines.append(f"using git root {git_root}")
+    root = git_root
+    load_dotenv(root / ".env")
 
     sql_files, has_other = _scan_sql_signals(root)
     if not sql_files and not has_other:
@@ -377,10 +408,12 @@ def run_setup(
         )
         notes, mappings, default_urn = _suggest_from_files(root, sql_files, _demo_lookup)
         lines.extend(notes)
+        if not mappings:
+            default_urn = _DEMO_URNS["raw_orders"]
         _apply_config_suggestions(
             config_path,
             mappings=mappings,
-            default_urn=default_urn or _DEMO_URNS["raw_orders"],
+            default_urn=default_urn,
             replace_placeholders=True,
         )
     else:
@@ -414,7 +447,7 @@ def run_setup(
         if not skip_secrets:
             lines.extend(_try_set_gh_secrets(root, url, token))
 
-    doc_lines, doc_rc = run_doctor(root)
+    doc_lines, doc_rc = run_doctor(root, require_gms=not demo)
     lines.extend(doc_lines)
     lines.append("")
     lines.extend(_NEXT_STEPS)

@@ -105,6 +105,34 @@ class TestDoctor(unittest.TestCase):
         self.assertTrue(any("config missing" in ln for ln in lines))
         self.assertTrue(any("cascade setup" in ln for ln in lines))
 
+    def test_placeholder_urns_are_not_real_mappings(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            run_init(root)
+            with mock.patch.dict(os.environ, {"DATAHUB_GMS_URL": "", "CASCADE_SOURCE_URN": ""}, clear=False):
+                lines, rc = run_doctor(root)
+        self.assertEqual(rc, 1)
+        self.assertTrue(any("no real default_urn" in ln for ln in lines))
+
+    def test_demo_doctor_skips_gms_probe(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            run_init(root)
+            cfg = json.loads((root / ".cascade" / "config.json").read_text())
+            cfg["default_urn"] = RAW_URN
+            cfg["mappings"] = [{"path": "models/", "urn": RAW_URN}]
+            (root / ".cascade" / "config.json").write_text(json.dumps(cfg))
+            with mock.patch.dict(
+                os.environ,
+                {"DATAHUB_GMS_URL": "https://gms.example.invalid", "CASCADE_MODE": ""},
+                clear=False,
+            ):
+                with mock.patch("cascade.setup_cmd.health_check") as health:
+                    lines, rc = run_doctor(root, require_gms=False)
+            health.assert_not_called()
+            self.assertEqual(rc, 0, msg=lines)
+            self.assertTrue(any("did not probe GMS" in ln for ln in lines))
+
 
 class TestSetup(unittest.TestCase):
     def test_rejects_non_git_dir(self):
@@ -197,8 +225,8 @@ class TestSetup(unittest.TestCase):
             ):
                 with mock.patch("cascade.setup_cmd.health_check", return_value=True):
                     with mock.patch(
-                        "cascade.setup_cmd.search_dataset_urns",
-                        return_value=[STG_URN],
+                        "cascade.setup_cmd.search_dataset_hits",
+                        return_value=([STG_URN], False),
                     ):
                         lines, rc = run_setup(root, non_interactive=True, skip_secrets=True)
             self.assertEqual(rc, 0, msg=lines)
@@ -224,12 +252,13 @@ class TestSetup(unittest.TestCase):
                 clear=False,
             ):
                 with mock.patch("cascade.setup_cmd.health_check", return_value=True):
-                    with mock.patch("cascade.setup_cmd.search_dataset_urns", return_value=[STG_URN]):
+                    with mock.patch("cascade.setup_cmd.search_dataset_hits", return_value=([STG_URN], False)):
                         with mock.patch("cascade.setup_cmd.shutil.which", return_value=None):
                             lines, rc = run_setup(root, non_interactive=True, skip_secrets=False)
             self.assertEqual(rc, 0, msg=lines)
             joined = "\n".join(lines)
             self.assertIn("gh secret set DATAHUB_GMS_URL", joined)
+            self.assertIn("gh secret set DATAHUB_TOKEN", joined)
             self.assertNotIn("secret-token", joined)
 
     def test_interactive_continue_without_sql(self):
@@ -264,16 +293,164 @@ class TestSetup(unittest.TestCase):
             ):
                 with mock.patch("cascade.setup_cmd.health_check", return_value=True):
                     with mock.patch(
-                        "cascade.setup_cmd.search_dataset_urns",
-                        return_value=[STG_URN, other],
+                        "cascade.setup_cmd.search_dataset_hits",
+                        return_value=([STG_URN, other], False),
                     ):
                         lines, rc = run_setup(root, non_interactive=True, skip_secrets=True)
-            self.assertEqual(rc, 0, msg=lines)
+            self.assertEqual(rc, 1, msg=lines)
             cfg = json.loads((root / ".cascade" / "config.json").read_text())
             self.assertIn("YOUR_TABLE", json.dumps(cfg))
             joined = "\n".join(lines)
             self.assertIn("ambiguous models/stg_orders.sql", joined)
             self.assertIn("TODO:", joined)
+            self.assertTrue(any("no real default_urn" in ln for ln in lines))
+
+    def test_demo_succeeds_when_gms_url_is_unreachable(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _git_init(root)
+            _write_sql(root)
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "DATAHUB_GMS_URL": "https://gms.example.invalid",
+                    "DATAHUB_TOKEN": "",
+                    "CASCADE_MODE": "",
+                },
+                clear=False,
+            ):
+                with mock.patch("cascade.setup_cmd.health_check", return_value=False) as health:
+                    lines, rc = run_setup(root, demo=True, non_interactive=True)
+            health.assert_not_called()
+            self.assertEqual(rc, 0, msg=lines)
+            self.assertTrue(any("did not probe GMS" in ln for ln in lines))
+
+    def test_nested_dir_writes_to_git_root(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _git_init(root)
+            nested = root / "dbt"
+            _write_sql(nested, "models/stg_orders.sql")
+            with mock.patch.dict(os.environ, {"DATAHUB_GMS_URL": "", "DATAHUB_TOKEN": "", "CASCADE_MODE": ""}, clear=False):
+                lines, rc = run_setup(nested, demo=True, non_interactive=True)
+            self.assertEqual(rc, 0, msg=lines)
+            self.assertTrue((root / ".github" / "workflows" / "cascade.yml").is_file())
+            self.assertFalse((nested / ".github").exists())
+            cfg = json.loads((root / ".cascade" / "config.json").read_text())
+            self.assertTrue(any(m.get("path") == "dbt/models/stg_orders.sql" for m in cfg["mappings"]))
+            self.assertTrue(any("using git root" in ln for ln in lines))
+
+    def test_unmatched_sql_does_not_inherit_first_match_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _git_init(root)
+            _write_sql(root, "models/stg_orders.sql")
+            _write_sql(root, "models/unknown_model.sql")
+            with mock.patch.dict(os.environ, {"DATAHUB_GMS_URL": "", "DATAHUB_TOKEN": "", "CASCADE_MODE": ""}, clear=False):
+                lines, rc = run_setup(root, demo=True, non_interactive=True)
+            self.assertEqual(rc, 0, msg=lines)
+            cfg = json.loads((root / ".cascade" / "config.json").read_text())
+            self.assertNotEqual(cfg.get("default_urn"), STG_URN)
+            self.assertNotIn("YOUR_TABLE", json.dumps(cfg))
+            self.assertTrue(any(m.get("path") == "models/stg_orders.sql" for m in cfg["mappings"]))
+            self.assertFalse(any(m.get("path") == "models/unknown_model.sql" for m in cfg["mappings"]))
+            self.assertIn("unmapped: models/unknown_model.sql", "\n".join(lines))
+
+    def test_rerun_does_not_replace_configured_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _git_init(root)
+            _write_sql(root)
+            with mock.patch.dict(os.environ, {"DATAHUB_GMS_URL": "", "DATAHUB_TOKEN": "", "CASCADE_MODE": ""}, clear=False):
+                lines, rc = run_setup(root, demo=True, non_interactive=True)
+                self.assertEqual(rc, 0, msg=lines)
+                cfg_path = root / ".cascade" / "config.json"
+                cfg = json.loads(cfg_path.read_text())
+                cfg["default_urn"] = RAW_URN
+                cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
+                lines, rc = run_setup(root, demo=True, non_interactive=True)
+            self.assertEqual(rc, 0, msg=lines)
+            cfg = json.loads(cfg_path.read_text())
+            self.assertEqual(cfg["default_urn"], RAW_URN)
+
+    def test_live_no_match_fails_on_placeholders(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _git_init(root)
+            _write_sql(root, "models/unknown_model.sql")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "DATAHUB_GMS_URL": "https://gms.example.invalid",
+                    "DATAHUB_TOKEN": "",
+                    "CASCADE_MODE": "",
+                },
+                clear=False,
+            ):
+                with mock.patch("cascade.setup_cmd.health_check", return_value=True):
+                    with mock.patch(
+                        "cascade.setup_cmd.search_dataset_hits",
+                        return_value=([], False),
+                    ):
+                        lines, rc = run_setup(root, non_interactive=True, skip_secrets=True)
+            self.assertEqual(rc, 1, msg=lines)
+            cfg = json.loads((root / ".cascade" / "config.json").read_text())
+            self.assertIn("YOUR_TABLE", json.dumps(cfg))
+            self.assertTrue(any("no real default_urn" in ln for ln in lines))
+
+    def test_truncated_catalog_page_is_not_unique(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _git_init(root)
+            _write_sql(root)
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "DATAHUB_GMS_URL": "https://gms.example.invalid",
+                    "DATAHUB_TOKEN": "",
+                    "CASCADE_MODE": "",
+                },
+                clear=False,
+            ):
+                with mock.patch("cascade.setup_cmd.health_check", return_value=True):
+                    with mock.patch(
+                        "cascade.setup_cmd.search_dataset_hits",
+                        return_value=([STG_URN], True),
+                    ):
+                        lines, rc = run_setup(root, non_interactive=True, skip_secrets=True)
+            self.assertEqual(rc, 1, msg=lines)
+            cfg = json.loads((root / ".cascade" / "config.json").read_text())
+            self.assertIn("YOUR_TABLE", json.dumps(cfg))
+            self.assertFalse(any(m.get("urn") == STG_URN for m in cfg["mappings"]))
+            joined = "\n".join(lines)
+            self.assertIn("catalog search truncated", joined)
+
+    def test_copy_paste_omits_token_when_unset(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _git_init(root)
+            _write_sql(root)
+            env = {
+                k: v
+                for k, v in os.environ.items()
+                if k != "DATAHUB_TOKEN"
+            }
+            env.update({
+                "DATAHUB_GMS_URL": "https://gms.example.invalid",
+                "CASCADE_MODE": "",
+            })
+            with mock.patch.dict(os.environ, env, clear=True):
+                with mock.patch("cascade.setup_cmd.health_check", return_value=True):
+                    with mock.patch(
+                        "cascade.setup_cmd.search_dataset_hits",
+                        return_value=([STG_URN], False),
+                    ):
+                        with mock.patch("cascade.setup_cmd.shutil.which", return_value=None):
+                            lines, rc = run_setup(root, non_interactive=True, skip_secrets=False)
+            self.assertEqual(rc, 0, msg=lines)
+            joined = "\n".join(lines)
+            self.assertIn("gh secret set DATAHUB_GMS_URL", joined)
+            self.assertNotIn("gh secret set DATAHUB_TOKEN", joined)
 
 
 class TestSetupCli(unittest.TestCase):
