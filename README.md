@@ -6,7 +6,7 @@ It does not connect to your warehouse. It does not merge without a human. It coo
 
 ```text
 pip install cascade-bot
-cascade init
+cascade setup
 ```
 
 Python 3.11+ · Apache-2.0 · GitHub Actions · DataHub Cloud or self-hosted GMS · SQL / dbt
@@ -89,7 +89,7 @@ Warehouses (Snowflake, Postgres, BigQuery, …) work insofar as DataHub already 
 
 ```bash
 pip install cascade-bot
-cascade --help
+cascade setup
 ```
 
 From a clone of this repo (development):
@@ -147,11 +147,15 @@ You need:
 Then:
 
 ```bash
-cascade init
-cascade doctor
+pip install cascade-bot
+cascade setup
 ```
 
-`init` writes `.cascade/config.json`, `.env.example`, and `.github/workflows/cascade.yml`. Fill the config with your URNs, copy `.env.example` → `.env` (never commit `.env`), and add the same DataHub keys as GitHub Actions secrets.
+`setup` writes `.cascade/config.json`, `.env.example`, and `.github/workflows/cascade.yml`, probes DataHub if `DATAHUB_GMS_URL` is set, and tries to map SQL paths to catalog URNs. Pass `--demo` to skip live GMS (local/fixture path). `--non-interactive` fails instead of prompting. `--skip-secrets` skips GitHub Actions secrets.
+
+`cascade init` only writes the same files. `cascade doctor` is the check `setup` runs at the end.
+
+Copy `.env.example` → `.env` if you want a local file (never commit `.env`). Live PR comments still need DataHub.
 
 ### Map paths to URNs
 
@@ -206,7 +210,8 @@ On merge of `cascade/remediation/*`, `[.github/workflows/cascade-migrated.yml](.
 
 | Command                                 | Purpose                                                     |
 | --------------------------------------- | ----------------------------------------------------------- |
-| `cascade init`                          | Write config, `.env.example`, and the Action template       |
+| `cascade setup`                         | First-time setup: files, DataHub probe, optional `gh` secrets |
+| `cascade init`                          | Write config, `.env.example`, and the Action template only  |
 | `cascade doctor`                        | Check Python, config, URN mapping, GMS health, rewrite mode |
 | `cascade demo`                          | Fixture path: impact → generate → apply dry-run             |
 | `cascade impact --diff …`               | Blast-radius `ImpactReport` (JSON on stdout)                |

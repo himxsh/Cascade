@@ -59,8 +59,8 @@ If you change impact, rewrite, or apply behavior, update the golden artifacts un
 
 | Path | Role |
 | --- | --- |
-| `cascade/` | Engine and CLI (`impact`, `generate`, `apply`, `policy`, `init`, `doctor`, `demo`) |
-| `cascade/templates/` | Files `cascade init` writes into a consumer repo |
+| `cascade/` | Engine and CLI (`impact`, `generate`, `apply`, `policy`, `setup`, `init`, `doctor`, `demo`) |
+| `cascade/templates/` | Files `cascade setup` / `cascade init` write into a consumer repo |
 | `tests/` | Unit tests and golden-diff eval |
 | `examples/` | Sample diffs, models, and the consumer Action template |
 | `demo/fixtures/` | Offline catalog used by `--source fixture` |

@@ -16,7 +16,7 @@ from cascade.dotenv_load import load_dotenv
 from cascade.impact import build_impact_report
 from cascade.models import ImpactReport
 from cascade.policy import evaluate_policy
-from cascade.setup_cmd import run_doctor, run_init
+from cascade.setup_cmd import run_doctor, run_init, run_setup
 
 
 def _resolve_impact_urns(args: argparse.Namespace, diff_text: str) -> list[str]:
@@ -222,6 +222,18 @@ def cmd_init(args: argparse.Namespace) -> None:
         print(line)
 
 
+def cmd_setup(args: argparse.Namespace) -> None:
+    lines, rc = run_setup(
+        Path(args.dir) if args.dir else Path.cwd(),
+        demo=args.demo,
+        non_interactive=args.non_interactive,
+        skip_secrets=args.skip_secrets,
+    )
+    print("\n".join(lines))
+    if rc:
+        raise SystemExit(rc)
+
+
 def cmd_doctor(args: argparse.Namespace) -> None:
     lines, rc = run_doctor(Path(args.dir) if args.dir else Path.cwd())
     print("\n".join(lines))
@@ -340,6 +352,28 @@ def main() -> None:
         help="Exit non-zero when policy fails",
     )
     policy_p.set_defaults(func=cmd_policy)
+
+    setup_p = sub.add_parser(
+        "setup",
+        help="First-time repo setup: config, Action, DataHub probe, optional secrets",
+    )
+    setup_p.add_argument("--dir", help="Repo root (default: cwd)")
+    setup_p.add_argument(
+        "--demo",
+        action="store_true",
+        help="Skip live DataHub; write fixture-oriented config",
+    )
+    setup_p.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Do not prompt; fail if git/SQL/DataHub input is missing",
+    )
+    setup_p.add_argument(
+        "--skip-secrets",
+        action="store_true",
+        help="Do not set GitHub Actions secrets",
+    )
+    setup_p.set_defaults(func=cmd_setup)
 
     init_p = sub.add_parser("init", help="Write .cascade/config.json, .env.example, and GitHub Action")
     init_p.add_argument("--dir", help="Repo root (default: cwd)")

@@ -11,6 +11,8 @@ from cascade.datahub_live import (
     health_check,
     load_catalog_live,
     resolve_catalog,
+    search_dataset_hits,
+    search_dataset_urns,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "demo" / "fixtures" / "demo_graph.json"
@@ -60,6 +62,52 @@ class TestHealthCheck(unittest.TestCase):
     @patch("urllib.request.Request")
     def test_connection_error(self, mock_req, mock_urlopen):
         self.assertFalse(health_check("http://fake:9999"))
+
+
+class TestSearchDatasetUrns(unittest.TestCase):
+    @patch("cascade.datahub_live._graphql")
+    def test_parses_urns(self, mock_gql):
+        mock_gql.return_value = {
+            "data": {
+                "searchAcrossEntities": {
+                    "searchResults": [
+                        {"entity": {"urn": RAW_URN}},
+                        {"entity": {"urn": STG_URN}},
+                    ]
+                }
+            }
+        }
+        urns, truncated = search_dataset_hits("orders", gms_url="http://fake:8080")
+        self.assertEqual(urns, [RAW_URN, STG_URN])
+        self.assertFalse(truncated)
+
+    @patch("cascade.datahub_live._graphql")
+    def test_truncated_when_total_exceeds_page(self, mock_gql):
+        mock_gql.return_value = {
+            "data": {
+                "searchAcrossEntities": {
+                    "total": 25,
+                    "searchResults": [{"entity": {"urn": STG_URN}}],
+                }
+            }
+        }
+        urns, truncated = search_dataset_hits("stg_orders", gms_url="http://fake:8080", count=10)
+        self.assertEqual(urns, [STG_URN])
+        self.assertTrue(truncated)
+
+    @patch("cascade.datahub_live._graphql")
+    def test_full_page_without_total_is_truncated(self, mock_gql):
+        rows = [{"entity": {"urn": f"urn:li:dataset:(urn:li:dataPlatform:snowflake,t{i},PROD)"}} for i in range(10)]
+        mock_gql.return_value = {
+            "data": {"searchAcrossEntities": {"searchResults": rows}}
+        }
+        _urns, truncated = search_dataset_hits("t", gms_url="http://fake:8080", count=10)
+        self.assertTrue(truncated)
+
+    @patch("cascade.datahub_live._graphql", side_effect=ValueError("no search"))
+    def test_failure_is_empty(self, mock_gql):
+        self.assertEqual(search_dataset_urns("orders", gms_url="http://fake:8080"), [])
+        self.assertEqual(search_dataset_hits("orders", gms_url="http://fake:8080"), ([], False))
 
 
 class TestFetchDataset(unittest.TestCase):
