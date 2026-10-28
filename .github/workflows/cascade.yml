@@ -32,6 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -81,13 +83,32 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        if: github.event_name != 'issue_comment'
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.issue.number) }}
+          persist-credentials: false
+      # issue_comment carries repo secrets and a contents:write token. Install
+      # Cascade from the default branch. The PR tree is data (diff + SQL) only.
+      # checkout's path must stay inside the workspace (an absolute RUNNER_TEMP
+      # path is rejected), so the trusted tree is ./trusted-cascade.
+      - uses: actions/checkout@v4
+        if: github.event_name == 'issue_comment'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ format('refs/pull/{0}/head', github.event.issue.number) }}
+      - uses: actions/checkout@v4
+        if: github.event_name == 'issue_comment'
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted-cascade
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install
+        working-directory: ${{ github.event_name == 'issue_comment' && 'trusted-cascade' || '.' }}
         run: pip install -e .
       - name: Resolve PR
         id: pr
