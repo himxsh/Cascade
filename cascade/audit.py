@@ -4,16 +4,22 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 
+def _safe_run_id(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip(".-")
+    return (cleaned or "run")[:120]
+
+
 def make_run_id(*, pr_number: int | None = None) -> str:
     explicit = os.environ.get("CASCADE_RUN_ID", "").strip()
     if explicit:
-        return explicit
+        return _safe_run_id(explicit)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     if pr_number and pr_number > 0:
         return f"pr-{pr_number}-{stamp}"
@@ -30,7 +36,10 @@ def write_run_audit(
 ) -> Path:
     """Copy key apply artifacts into cascade/runs/<id>/ for operator audit."""
     base = Path(root) if root is not None else Path.cwd()
-    run_dir = base / "cascade" / "runs" / run_id
+    runs = (base / "cascade" / "runs").resolve()
+    run_dir = (runs / _safe_run_id(run_id)).resolve()
+    if run_dir.parent != runs and runs not in run_dir.parents:
+        raise ValueError("run id escapes the audit directory")
     run_dir.mkdir(parents=True, exist_ok=True)
 
     (run_dir / "impact_report.json").write_text(json.dumps(report, indent=2) + "\n")

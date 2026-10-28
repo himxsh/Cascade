@@ -142,6 +142,37 @@ class TestResolveModelPath(unittest.TestCase):
             cfg = load_config(path)
         self.assertEqual(cfg.urn_files["urn:a"], "models/marts/a.sql")
 
+    def test_load_drops_paths_that_escape_the_repo(self):
+        raw = {
+            "models_dir": "../../etc",
+            "urn_files": {
+                "urn:bad": "../.git/config",
+                "urn:git": ".git/config",
+                "urn:ok": "models/a.sql",
+            },
+        }
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "config.json"
+            path.write_text(json.dumps(raw))
+            cfg = load_config(path)
+        self.assertIsNone(cfg.models_dir)
+        self.assertEqual(cfg.urn_files, {"urn:ok": "models/a.sql"})
+
+    def test_resolve_rejects_git_and_escape(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            models = root / "models"
+            models.mkdir()
+            sql = models / "fct_orders.sql"
+            sql.write_text("select 1")
+            outside = root / "notes.txt"
+            outside.write_text("secret")
+            urn = "urn:li:dataset:(urn:li:dataPlatform:postgres,db.public.fct_orders,PROD)"
+            self.assertEqual(resolve_model_path(urn, models, {urn: str(sql)}), sql)
+            self.assertIsNone(resolve_model_path(urn, models, {urn: str(outside)}))
+            self.assertIsNone(resolve_model_path(urn, models, {urn: "../.git/config"}))
+            self.assertIsNone(resolve_model_path(urn, models, {urn: ".git/config"}))
+
 
 if __name__ == "__main__":
     unittest.main()

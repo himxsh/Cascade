@@ -125,8 +125,19 @@ def parse_changes_text(text: str) -> list[dict[str, Any]]:
     if not stripped:
         return []
     if stripped.startswith("{") or stripped.startswith("["):
-        data = json.loads(text)
-        return data if isinstance(data, list) else data.get("changes", [])
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as e:
+            raise ValueError("invalid changes JSON") from e
+        if isinstance(data, list):
+            changes = data
+        elif isinstance(data, dict):
+            changes = data.get("changes", [])
+        else:
+            raise ValueError("changes JSON must be a list or object")
+        if not isinstance(changes, list):
+            raise ValueError("changes must be a list")
+        return changes
     return parse_diff(text)
 
 

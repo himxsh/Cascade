@@ -152,6 +152,24 @@ class TestFetchDataset(unittest.TestCase):
         self.assertEqual(result["schema_fields"], [])
         self.assertEqual(result["owners"], [])
 
+    @patch("cascade.datahub_live._graphql")
+    def test_fine_grained_error_retries_without_latch(self, mock_gql):
+        ok = {
+            "data": {
+                "dataset": {
+                    "urn": RAW_URN,
+                    "properties": {"name": "raw_orders"},
+                    "schemaMetadata": {"fields": []},
+                }
+            }
+        }
+        mock_gql.side_effect = [ValueError("Cannot query field fineGrainedLineages"), ok, ok]
+        first = fetch_dataset(RAW_URN, "http://fake:8080")
+        second = fetch_dataset(RAW_URN, "http://fake:8080")
+        self.assertEqual(first["name"], "raw_orders")
+        self.assertEqual(second["name"], "raw_orders")
+        self.assertEqual(mock_gql.call_count, 3)
+
 
 class TestFetchLineage(unittest.TestCase):
     @patch("cascade.datahub_live._graphql")

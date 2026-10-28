@@ -63,6 +63,23 @@ class TestAudit(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CASCADE_RUN_ID": "fixed-id"}):
             self.assertEqual(make_run_id(pr_number=1), "fixed-id")
 
+    def test_run_id_cannot_escape_audit_dir(self):
+        with mock.patch.dict(os.environ, {"CASCADE_RUN_ID": "../../tmp/pwn"}):
+            safe = make_run_id()
+        self.assertNotIn("/", safe)
+        self.assertNotIn("..", safe)
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = write_run_audit(
+                run_id="../../tmp/pwn",
+                report={"source_urn": "urn:x"},
+                summary={"mode": "dry-run"},
+                apply_out=tmp,
+                root=tmp,
+            )
+            runs = (Path(tmp) / "cascade" / "runs").resolve()
+            self.assertEqual(run_dir.parent, runs)
+            self.assertFalse((Path(tmp).resolve().parent / "pwn").exists())
+
 
 class TestIdempotentComment(unittest.TestCase):
     def test_updates_existing_cascade_comment(self):
