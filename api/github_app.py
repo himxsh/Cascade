@@ -129,18 +129,48 @@ def user_may_claim_installation(
     remote: dict[str, Any],
     *,
     state_ok: bool,
+    accessible_ids: set[int] | None = None,
 ) -> bool:
-    """Dashboard-initiated installs pass `state`. User-account installs may match github id."""
-    if state_ok:
-        return True
+    """Personal installs must match the signed-in GitHub user.
+
+    Org installs must be in that user's installation list (from their OAuth
+    token) and carry the signed setup state. State alone is not authorization:
+    any signed-in user can mint one from /api/me and pair it with another
+    installation_id.
+    """
     account_type = str(remote.get("account_type") or remote.get("target_type") or "")
     account_id = remote.get("account_id")
-    if account_type.lower() != "user" or account_id is None:
-        return False
+    if account_type.lower() == "user" and account_id is not None:
+        try:
+            if int(account_id) == int(user["github_user_id"]):
+                return True
+        except (TypeError, ValueError):
+            return False
     try:
-        return int(account_id) == int(user["github_user_id"])
-    except (TypeError, ValueError):
+        inst_id = int(remote["installation_id"])
+    except (KeyError, TypeError, ValueError):
         return False
+    allowed = accessible_ids or set()
+    return bool(state_ok and inst_id in allowed)
+
+
+def list_accessible_installation_ids(user_token: str) -> set[int]:
+    """Installation ids visible to this GitHub App user access token."""
+    found: set[int] = set()
+    for page in range(1, 11):
+        data = _http_json(
+            f"{GITHUB_API}/user/installations?per_page=100&page={page}",
+            token=user_token,
+        )
+        rows = data.get("installations") or []
+        if not isinstance(rows, list) or not rows:
+            break
+        for row in rows:
+            if isinstance(row, dict) and isinstance(row.get("id"), int):
+                found.add(int(row["id"]))
+        if len(rows) < 100:
+            break
+    return found
 
 
 def _b64url(data: bytes) -> str:

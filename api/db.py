@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL,
-  expires_at TEXT NOT NULL
+  expires_at TEXT NOT NULL,
+  github_access_token TEXT
 );
 
 CREATE TABLE IF NOT EXISTS installations (
@@ -82,7 +83,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL,
-  expires_at TEXT NOT NULL
+  expires_at TEXT NOT NULL,
+  github_access_token TEXT
 );
 
 CREATE TABLE IF NOT EXISTS installations (
@@ -286,12 +288,56 @@ def parse_libsql_target(target: str) -> tuple[str, str]:
     return http_url, token
 
 
+def _duplicate_column(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return "duplicate column" in msg or "already exists" in msg
+
+
+def _has_session_token_column(conn: Any, dialect: str) -> bool:
+    try:
+        if dialect == "postgres":
+            row = conn.execute(
+                """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'sessions' AND column_name = 'github_access_token'
+                """
+            ).fetchone()
+            return row is not None
+        rows = conn.execute("PRAGMA table_info(sessions)").fetchall()
+    except Exception:
+        return False
+    for row in rows:
+        if isinstance(row, dict):
+            name = row.get("name")
+        else:
+            try:
+                name = row["name"]
+            except (KeyError, IndexError, TypeError):
+                name = row[1]
+        if name == "github_access_token":
+            return True
+    return False
+
+
+def _ensure_session_token_column(conn: Any, dialect: str) -> None:
+    """CREATE IF NOT EXISTS does not add columns to a database that already exists."""
+    if _has_session_token_column(conn, dialect):
+        return
+    try:
+        conn.execute("ALTER TABLE sessions ADD COLUMN github_access_token TEXT")
+    except Exception as exc:
+        if _duplicate_column(exc):
+            return
+        raise
+
+
 def _ensure_schema(conn: Any, key: str, dialect: str) -> None:
     with _boot_lock:
         if key in _bootstrapped:
             return
         script = _POSTGRES_SCHEMA if dialect == "postgres" else _SCHEMA
         conn.executescript(script)
+        _ensure_session_token_column(conn, dialect)
         conn.commit()
         _bootstrapped.add(key)
 

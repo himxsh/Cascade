@@ -142,4 +142,5 @@ def exchange_code(code: str, redirect_uri: str) -> dict[str, Any]:
         "github_user_id": int(github_id),
         "login": login,
         "avatar_url": str(user.get("avatar_url") or ""),
+        "access_token": str(access),
     }

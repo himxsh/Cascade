@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,8 +23,11 @@ from api.store import (
     adopt_installation,
     create_session,
     get_session_user,
+    list_repos_for_installation,
     list_repos_for_user,
+    session_github_token,
     lookup_repo,
+    mock_github_repo_id,
     mock_installation_id_for_user,
     seed_mock_workspace,
     set_repo_enabled,
@@ -152,6 +156,14 @@ class TestStore(unittest.TestCase):
             self.assertTrue(updated["enabled"])
             found = lookup_repo(conn, owner=updated["owner"], name=updated["name"])
             self.assertTrue(found and found["enabled"])
+            self.assertIsNone(
+                lookup_repo(
+                    conn,
+                    owner=updated["owner"],
+                    name=updated["name"],
+                    github_repo_id=1001,
+                )
+            )
             other = set_repo_enabled(
                 conn,
                 user_id=int(user["id"]) + 99,
@@ -182,6 +194,31 @@ class TestStore(unittest.TestCase):
             ).fetchone()
             self.assertEqual(inst[0], mock_installation_id_for_user(user_id))
 
+    def test_old_mock_repo_ids_are_rewritten(self) -> None:
+        with get_conn() as conn:
+            user = upsert_user(conn, github_user_id=7, login="octocat")
+            inst = seed_mock_workspace(conn, int(user["id"]))
+            inst_id = int(inst["installation_id"])
+            conn.execute(
+                """
+                UPDATE repos SET github_repo_id = 1001
+                WHERE installation_id = ? AND name = 'analytics'
+                """,
+                (inst_id,),
+            )
+            seed_mock_workspace(conn, int(user["id"]))
+            self.assertIsNone(
+                lookup_repo(conn, owner="acme", name="analytics", github_repo_id=1001)
+            )
+            rewritten = lookup_repo(
+                conn,
+                owner="acme",
+                name="analytics",
+                github_repo_id=mock_github_repo_id(inst_id, 1),
+            )
+            self.assertIsNotNone(rewritten)
+            self.assertEqual(len(list_repos_for_user(conn, int(user["id"]))), 2)
+
     def test_mock_workspaces_are_isolated_per_user(self) -> None:
         with get_conn() as conn:
             alice = upsert_user(conn, github_user_id=10, login="alice")
@@ -201,6 +238,9 @@ class TestStore(unittest.TestCase):
                 mock_installation_id_for_user(int(bob["id"])),
             )
             self.assertNotEqual(a_repos[0]["installation_id"], b_repos[0]["installation_id"])
+            self.assertLess(a_repos[0]["github_repo_id"], 0)
+            self.assertLess(b_repos[0]["github_repo_id"], 0)
+            self.assertNotEqual(a_repos[0]["github_repo_id"], b_repos[0]["github_repo_id"])
             updated = set_repo_enabled(
                 conn,
                 user_id=int(alice["id"]),
@@ -251,16 +291,40 @@ class TestStore(unittest.TestCase):
             )
             self.assertEqual(same["account_login"], "acme-renamed")
             self.assertEqual(int(same["installer_user_id"]), int(alice["id"]))
+            self.assertEqual(list_repos_for_installation(conn, 99), [])
 
     def test_session_roundtrip(self) -> None:
         with get_conn() as conn:
             user = upsert_user(conn, github_user_id=0, login="dev")
-            token = create_session(conn, int(user["id"]))
+            token = create_session(conn, int(user["id"]), github_access_token="gho_secret")
             loaded = get_session_user(conn, token)
             self.assertIsNotNone(loaded)
             assert loaded is not None
             self.assertEqual(loaded["login"], "dev")
+            self.assertNotIn("github_access_token", loaded)
+            self.assertEqual(session_github_token(conn, token), "gho_secret")
             self.assertIsNone(get_session_user(conn, "nope"))
+
+    def test_session_token_column_migrates(self) -> None:
+        path = Path(self.tmp.name) / "old.db"
+        raw = sqlite3.connect(path)
+        raw.execute(
+            """
+            CREATE TABLE sessions (
+              id TEXT PRIMARY KEY,
+              user_id INTEGER NOT NULL,
+              created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL
+            )
+            """
+        )
+        raw.commit()
+        raw.close()
+        reset_bootstrap_cache()
+        with get_conn(f"sqlite:///{path}") as conn:
+            user = upsert_user(conn, github_user_id=3, login="migrated")
+            token = create_session(conn, int(user["id"]), github_access_token="gho_old")
+            self.assertEqual(session_github_token(conn, token), "gho_old")
 
 
 if __name__ == "__main__":

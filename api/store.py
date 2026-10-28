@@ -12,8 +12,8 @@ from api.db import row_to_dict
 MOCK_INSTALLATION_ID = 0
 
 MOCK_REPOS = (
-    {"github_repo_id": 1001, "owner": "acme", "name": "analytics", "enabled": 0},
-    {"github_repo_id": 1002, "owner": "acme", "name": "metrics-dbt", "enabled": 0},
+    {"slot": 1, "owner": "acme", "name": "analytics", "enabled": 0},
+    {"slot": 2, "owner": "acme", "name": "metrics-dbt", "enabled": 0},
 )
 
 SESSION_TTL = timedelta(days=30)
@@ -40,6 +40,15 @@ def mock_installation_id_for_user(user_id: int) -> int:
     if uid <= 0:
         raise ValueError("user_id must be a positive users.id")
     return -uid
+
+
+def mock_github_repo_id(installation_id: int, slot: int) -> int:
+    """Negative repo id so a mock row cannot collide with a real GitHub repository."""
+    inst = int(installation_id)
+    slot_n = int(slot)
+    if inst >= 0 or slot_n <= 0:
+        raise ValueError("mock github repo ids require a mock installation and a positive slot")
+    return inst * 10 - slot_n
 
 
 def _now() -> datetime:
@@ -79,12 +88,20 @@ def upsert_user(
     return row_to_dict(row) or {}
 
 
-def create_session(conn: Any, user_id: int) -> str:
+def create_session(
+    conn: Any,
+    user_id: int,
+    github_access_token: str | None = None,
+) -> str:
     token = secrets.token_urlsafe(32)
     now = _now()
     conn.execute(
-        "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-        (token, user_id, _iso(now), _iso(now + SESSION_TTL)),
+        """
+        INSERT INTO sessions (
+          id, user_id, created_at, expires_at, github_access_token
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        (token, user_id, _iso(now), _iso(now + SESSION_TTL), github_access_token),
     )
     return token
 
@@ -101,6 +118,24 @@ def get_session_user(conn: Any, session_id: str | None) -> dict[str, Any] | None
         (session_id, _iso(_now())),
     ).fetchone()
     return row_to_dict(row)
+
+
+def session_github_token(conn: Any, session_id: str | None) -> str | None:
+    """OAuth user token for installation checks. Never returned by /api/me."""
+    if not session_id:
+        return None
+    row = conn.execute(
+        """
+        SELECT github_access_token FROM sessions
+        WHERE id = ? AND expires_at > ?
+        """,
+        (session_id, _iso(_now())),
+    ).fetchone()
+    data = row_to_dict(row) or {}
+    token = data.get("github_access_token")
+    if token is None or token == "":
+        return None
+    return str(token)
 
 
 def delete_session(conn: Any, session_id: str | None) -> None:
@@ -168,6 +203,9 @@ def seed_mock_workspace(conn: Any, user_id: int) -> dict[str, Any]:
     """Create a per-user mock install + repos so the dashboard works without a GitHub App."""
     existing = list_installations_for_user(conn, user_id)
     if existing:
+        inst_id = int(existing[0]["installation_id"])
+        if is_mock_installation_id(inst_id):
+            seed_mock_repos(conn, inst_id)
         return existing[0]
     mock_id = mock_installation_id_for_user(user_id)
     inst = upsert_installation(
@@ -182,13 +220,28 @@ def seed_mock_workspace(conn: Any, user_id: int) -> dict[str, Any]:
 
 
 def seed_mock_repos(conn: Any, installation_id: int) -> list[dict[str, Any]]:
+    if int(installation_id) >= 0:
+        return list_repos_for_installation(conn, installation_id)
     for spec in MOCK_REPOS:
+        repo_id = mock_github_repo_id(installation_id, int(spec["slot"]))
+        # Rows seeded before this id scheme used 1001/1002 and matched real webhooks.
+        conn.execute(
+            """
+            UPDATE repos
+            SET github_repo_id = ?
+            WHERE installation_id = ?
+              AND lower(owner) = lower(?)
+              AND lower(name) = lower(?)
+              AND github_repo_id > 0
+            """,
+            (repo_id, installation_id, spec["owner"], spec["name"]),
+        )
         found = conn.execute(
             """
             SELECT id FROM repos
             WHERE installation_id = ? AND github_repo_id = ?
             """,
-            (installation_id, spec["github_repo_id"]),
+            (installation_id, repo_id),
         ).fetchone()
         if found:
             continue
@@ -202,7 +255,7 @@ def seed_mock_repos(conn: Any, installation_id: int) -> list[dict[str, Any]]:
                 installation_id,
                 spec["owner"],
                 spec["name"],
-                spec["github_repo_id"],
+                repo_id,
                 spec["enabled"],
             ),
         )
@@ -239,7 +292,8 @@ def adopt_installation(
         account_type=account_type or "Organization",
         installer_user_id=user_id,
     )
-    seed_mock_repos(conn, installation_id)
+    # Real installations do not get the acme/* sample rows. Those ids and names
+    # would make a signed webhook for a different repository look enabled.
     return inst
 
 
@@ -301,12 +355,13 @@ def lookup_repo(
     github_repo_id: int | None = None,
 ) -> dict[str, Any] | None:
     if github_repo_id is not None:
+        # An explicit GitHub id is authoritative. Do not fall back to owner/name:
+        # every mock workspace is named acme/analytics.
         row = conn.execute(
             "SELECT * FROM repos WHERE github_repo_id = ? ORDER BY enabled DESC LIMIT 1",
             (github_repo_id,),
         ).fetchone()
-        if row:
-            return _repo_out(row)
+        return _repo_out(row) if row else None
     if owner and name:
         row = conn.execute(
             """
@@ -338,12 +393,19 @@ def record_delivery(
     ).fetchone()
     if existing:
         return False
-    conn.execute(
-        """
-        INSERT INTO webhook_deliveries (
-          id, event, action, repo_full_name, status, reason, received_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (delivery_id, event, action, repo_full_name, status, reason, _iso(_now())),
-    )
+    try:
+        conn.execute(
+            """
+            INSERT INTO webhook_deliveries (
+              id, event, action, repo_full_name, status, reason, received_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (delivery_id, event, action, repo_full_name, status, reason, _iso(_now())),
+        )
+    except Exception as exc:
+        # Two deliveries can pass the SELECT before either INSERT commits.
+        msg = str(exc).lower()
+        if "unique" in msg or "duplicate" in msg:
+            return False
+        raise
     return True

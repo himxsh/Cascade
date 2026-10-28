@@ -3,6 +3,13 @@ import { fetchAuthConfig, type AuthConfig } from './api'
 import { Link, GitHubMark } from './Link'
 import { GITHUB } from './site'
 
+function safeNext(next: string | null): string {
+  if (!next || !/^\/[A-Za-z0-9._~/-]*$/.test(next) || next.includes('//')) {
+    return '/app'
+  }
+  return next
+}
+
 export function SignIn() {
   const [config, setConfig] = useState<AuthConfig | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -12,10 +19,7 @@ export function SignIn() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const reason = params.get('reason')
-    const next = params.get('next')
-    if (next && next.startsWith('/') && !next.startsWith('//')) {
-      setNextPath(next)
-    }
+    setNextPath(safeNext(params.get('next')))
     if (reason && reason !== 'oauth_unconfigured') {
       setError(reason.replaceAll('_', ' '))
     }
