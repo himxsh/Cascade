@@ -1,12 +1,12 @@
 name: Publish to PyPI
 
-# Bump `version` in pyproject.toml (and cascade/__init__.py), merge to main,
-# and this uploads it. Versions already on PyPI are skipped, so other merges
-# that touch pyproject.toml are no-ops.
+# Bump __version__ in cascade/__init__.py, merge to main, and this uploads it.
+# Versions already on PyPI are skipped, so other merges that touch these
+# files are no-ops.
 on:
   push:
     branches: [main]
-    paths: [pyproject.toml, .github/workflows/publish.yml]
+    paths: [cascade/__init__.py, pyproject.toml, .github/workflows/publish.yml]
   workflow_dispatch:
 
 concurrency:
@@ -26,7 +26,7 @@ jobs:
           python-version: "3.11"
       - id: version
         run: |
-          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          version=$(python -c "import cascade; print(cascade.__version__)")
           echo "version=$version" >> "$GITHUB_OUTPUT"
           status=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/cascade-bot/$version/json")
           if [ "$status" = "404" ]; then
