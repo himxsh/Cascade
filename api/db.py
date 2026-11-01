@@ -293,16 +293,8 @@ def _duplicate_column(exc: BaseException) -> bool:
     return "duplicate column" in msg or "already exists" in msg
 
 
-def _has_session_token_column(conn: Any, dialect: str) -> bool:
+def _has_session_token_column(conn: Any) -> bool:
     try:
-        if dialect == "postgres":
-            row = conn.execute(
-                """
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'sessions' AND column_name = 'github_access_token'
-                """
-            ).fetchone()
-            return row is not None
         rows = conn.execute("PRAGMA table_info(sessions)").fetchall()
     except Exception:
         return False
@@ -321,7 +313,11 @@ def _has_session_token_column(conn: Any, dialect: str) -> bool:
 
 def _ensure_session_token_column(conn: Any, dialect: str) -> None:
     """CREATE IF NOT EXISTS does not add columns to a database that already exists."""
-    if _has_session_token_column(conn, dialect):
+    if dialect == "postgres":
+        # IF NOT EXISTS: a caught "already exists" error would abort the transaction.
+        conn.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS github_access_token TEXT")
+        return
+    if _has_session_token_column(conn):
         return
     try:
         conn.execute("ALTER TABLE sessions ADD COLUMN github_access_token TEXT")
@@ -331,6 +327,17 @@ def _ensure_session_token_column(conn: Any, dialect: str) -> None:
         raise
 
 
+# Older builds seeded these sample rows into real installations too. Their ids
+# can belong to unrelated GitHub repos and make those webhooks look enabled.
+_DROP_LEGACY_SAMPLE_REPOS = """
+DELETE FROM repos
+WHERE installation_id > 0
+  AND github_repo_id IN (1001, 1002)
+  AND lower(owner) = 'acme'
+  AND lower(name) IN ('analytics', 'metrics-dbt')
+"""
+
+
 def _ensure_schema(conn: Any, key: str, dialect: str) -> None:
     with _boot_lock:
         if key in _bootstrapped:
@@ -338,6 +345,7 @@ def _ensure_schema(conn: Any, key: str, dialect: str) -> None:
         script = _POSTGRES_SCHEMA if dialect == "postgres" else _SCHEMA
         conn.executescript(script)
         _ensure_session_token_column(conn, dialect)
+        conn.execute(_DROP_LEGACY_SAMPLE_REPOS)
         conn.commit()
         _bootstrapped.add(key)
 

@@ -3,8 +3,17 @@ import { fetchAuthConfig, type AuthConfig } from './api'
 import { Link, GitHubMark } from './Link'
 import { GITHUB } from './site'
 
+// Mirrors _safe_next in api/server.py: same-origin path plus an optional query.
 function safeNext(next: string | null): string {
-  if (!next || !/^\/[A-Za-z0-9._~/-]*$/.test(next) || next.includes('//')) {
+  if (!next) return '/app'
+  const [route, ...rest] = next.split('?')
+  const query = rest.join('?')
+  if (
+    !/^\/[A-Za-z0-9._~/-]*$/.test(route) ||
+    route.includes('//') ||
+    next.includes('\\') ||
+    !/^[A-Za-z0-9._~%&=+:,/-]*$/.test(query)
+  ) {
     return '/app'
   }
   return next

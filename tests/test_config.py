@@ -154,9 +154,27 @@ class TestResolveModelPath(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "config.json"
             path.write_text(json.dumps(raw))
-            cfg = load_config(path)
+            with self.assertLogs("cascade.config", level="WARNING") as logs:
+                cfg = load_config(path)
         self.assertIsNone(cfg.models_dir)
         self.assertEqual(cfg.urn_files, {"urn:ok": "models/a.sql"})
+        self.assertEqual(len(logs.output), 3)
+
+    def test_models_dir_repo_root(self):
+        for value in (".", "./"):
+            with tempfile.TemporaryDirectory() as td:
+                path = Path(td) / "config.json"
+                path.write_text(json.dumps({"models_dir": value}))
+                self.assertEqual(load_config(path).models_dir, ".")
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "fct_orders.sql").write_text("select 1")
+            urn = "urn:li:dataset:(urn:li:dataPlatform:postgres,db.public.fct_orders,PROD)"
+            cwd = os.getcwd()
+            os.chdir(td)
+            try:
+                self.assertEqual(resolve_model_path(urn, "."), Path("fct_orders.sql"))
+            finally:
+                os.chdir(cwd)
 
     def test_resolve_rejects_git_and_escape(self):
         with tempfile.TemporaryDirectory() as td:

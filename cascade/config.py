@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger("cascade.config")
 
 
 @dataclass(frozen=True)
@@ -88,7 +91,16 @@ def _parse(data: dict[str, Any]) -> CascadeConfig:
     mappings.sort(key=lambda p: len(p[0]), reverse=True)
     default_urn = data.get("default_urn") or data.get("urn")
     models_raw = data.get("models_dir")
-    models_dir = _safe_rel(str(models_raw)) if models_raw else None
+    models_dir: str | None = None
+    if models_raw:
+        if _normalize_prefix(str(models_raw)).rstrip("/") in ("", "."):
+            models_dir = "."  # SQL lives at the repo root
+        else:
+            models_dir = _safe_rel(str(models_raw))
+            if models_dir is None:
+                log.warning(
+                    "Ignoring models_dir %r: it must be a path inside the repo", models_raw
+                )
     urn_files: dict[str, str] = {}
     raw_files = data.get("urn_files") or {}
     if isinstance(raw_files, dict):
@@ -96,6 +108,12 @@ def _parse(data: dict[str, Any]) -> CascadeConfig:
             safe = _safe_rel(str(fpath))
             if safe:
                 urn_files[str(urn)] = safe
+            else:
+                log.warning(
+                    "Ignoring urn_files entry %r -> %r: it must be a path inside the repo",
+                    urn,
+                    fpath,
+                )
     rewrite = data.get("rewrite") if isinstance(data.get("rewrite"), dict) else {}
     mode = str(rewrite.get("mode") or "").strip().lower() or None
     provider = str(rewrite.get("provider") or "").strip().lower() or None
@@ -129,6 +147,7 @@ def resolve_model_path(
     if urn_files and urn in urn_files:
         raw = Path(urn_files[urn])
         if raw.is_absolute():
+            # Callers can pass urn_files directly; config-loaded ones are relative.
             anchor = Path(models_dir) if models_dir else Path.cwd()
             return _contained_file(anchor, raw)
         anchor = Path.cwd()

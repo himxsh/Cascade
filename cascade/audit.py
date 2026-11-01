@@ -37,9 +37,7 @@ def write_run_audit(
     """Copy key apply artifacts into cascade/runs/<id>/ for operator audit."""
     base = Path(root) if root is not None else Path.cwd()
     runs = (base / "cascade" / "runs").resolve()
-    run_dir = (runs / _safe_run_id(run_id)).resolve()
-    if run_dir.parent != runs and runs not in run_dir.parents:
-        raise ValueError("run id escapes the audit directory")
+    run_dir = runs / _safe_run_id(run_id)  # no separators, so it cannot leave runs/
     run_dir.mkdir(parents=True, exist_ok=True)
 
     (run_dir / "impact_report.json").write_text(json.dumps(report, indent=2) + "\n")

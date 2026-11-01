@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
@@ -26,9 +27,9 @@ from api.db import get_conn
 from api.github_app import (
     GitHubAppError,
     fetch_installation,
-    list_accessible_installation_ids,
     make_setup_state,
     setup_state_matches,
+    user_is_org_admin,
     user_may_claim_installation,
 )
 from api.settings import (
@@ -240,13 +241,21 @@ def _app_banner() -> str | None:
     return APP_NOT_READY_BANNER
 
 
-_SAFE_NEXT_RE = re.compile(r"^/[A-Za-z0-9._~/-]*$")
+_SAFE_NEXT_PATH_RE = re.compile(r"^/[A-Za-z0-9._~/-]*$")
+_SAFE_NEXT_QUERY_RE = re.compile(r"^[A-Za-z0-9._~%&=+:,/-]*$")
 
 
 def _safe_next(path: str | None) -> str:
     value = (path or "/app").strip() or "/app"
+    # Same-origin path plus an optional query (/api/github/setup?installation_id=…).
     # Reject scheme-relative and backslash forms browsers treat as //host.
-    if "//" in value or "\\" in value or _SAFE_NEXT_RE.fullmatch(value) is None:
+    route, _, query = value.partition("?")
+    if (
+        "//" in route
+        or "\\" in value
+        or _SAFE_NEXT_PATH_RE.fullmatch(route) is None
+        or _SAFE_NEXT_QUERY_RE.fullmatch(query) is None
+    ):
         return "/app"
     return value
 
@@ -275,18 +284,27 @@ def _dev_harness_user(user: dict[str, Any]) -> bool:
     return dev_login_enabled() and int(user["github_user_id"]) == DEV_GITHUB_USER_ID
 
 
-def _accessible_installations(request: Request) -> set[int]:
-    cookie = request.cookies.get(COOKIE_NAME)
-    if not cookie:
-        return set()
-    with get_conn() as conn:
-        gh = session_github_token(conn, cookie)
-    if not gh:
-        return set()
-    try:
-        return list_accessible_installation_ids(gh)
-    except GitHubAppError:
-        return set()
+def _org_admin_check(request: Request) -> tuple[Callable[[str], bool], Callable[[], bool]]:
+    """Lazy org-admin lookup, plus a flag for "the stored GitHub token is missing or rejected"."""
+    needs_signin = False
+
+    def check(org_login: str) -> bool:
+        nonlocal needs_signin
+        cookie = request.cookies.get(COOKIE_NAME)
+        with get_conn() as conn:
+            gh = session_github_token(conn, cookie)
+        if not gh:
+            needs_signin = True
+            return False
+        try:
+            return user_is_org_admin(gh, org_login)
+        except GitHubAppError as e:
+            # 401: token revoked. 403: token predates the read:org scope or the
+            # org restricts OAuth apps. A fresh sign-in fixes the first two.
+            needs_signin = e.github_status in (401, 403)
+            return False
+
+    return check, lambda: needs_signin
 
 
 def _setup_redirect(setup_action: str | None) -> RedirectResponse:
@@ -435,6 +453,7 @@ def api_github_setup(
     state: str | None = None,
     account_login: str | None = None,
     account_type: str | None = None,
+    reauth: int = 0,
 ) -> RedirectResponse:
     user = _current_user(request)
     next_q = str(request.url).split("?", 1)
@@ -469,12 +488,12 @@ def api_github_setup(
         remote = fetch_installation(installation_id)
     except GitHubAppError:
         return RedirectResponse("/app/connect?error=installation_not_found", status_code=302)
-    if not user_may_claim_installation(
-        user,
-        remote,
-        state_ok=state_ok,
-        accessible_ids=_accessible_installations(request),
-    ):
+    org_admin, needs_signin = _org_admin_check(request)
+    if not user_may_claim_installation(user, remote, state_ok=state_ok, org_admin=org_admin):
+        if needs_signin() and not reauth:
+            # One retry through OAuth for a token with read:org, then back here.
+            retry = setup_url + ("&" if "?" in setup_url else "?") + "reauth=1"
+            return RedirectResponse(f"/auth/github?next={quote(retry, safe='')}", status_code=302)
         return RedirectResponse("/app/connect?error=installation_forbidden", status_code=302)
     try:
         with get_conn() as conn:

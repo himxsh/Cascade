@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from api.auth import open_token, seal_token
 from api.db import row_to_dict
 
 # GitHub installation ids are positive. Per-user mocks use -user_id (never 0).
@@ -101,7 +102,7 @@ def create_session(
           id, user_id, created_at, expires_at, github_access_token
         ) VALUES (?, ?, ?, ?, ?)
         """,
-        (token, user_id, _iso(now), _iso(now + SESSION_TTL), github_access_token),
+        (token, user_id, _iso(now), _iso(now + SESSION_TTL), seal_token(github_access_token)),
     )
     return token
 
@@ -132,10 +133,7 @@ def session_github_token(conn: Any, session_id: str | None) -> str | None:
         (session_id, _iso(_now())),
     ).fetchone()
     data = row_to_dict(row) or {}
-    token = data.get("github_access_token")
-    if token is None or token == "":
-        return None
-    return str(token)
+    return open_token(data.get("github_access_token"))
 
 
 def delete_session(conn: Any, session_id: str | None) -> None:
@@ -387,25 +385,16 @@ def record_delivery(
     reason: str | None,
 ) -> bool:
     """Insert a webhook delivery. Returns False if this id was already stored."""
-    existing = conn.execute(
-        "SELECT id FROM webhook_deliveries WHERE id = ?",
-        (delivery_id,),
+    # ON CONFLICT instead of catching the unique error: on Postgres a failed
+    # INSERT aborts the transaction the webhook handler keeps using.
+    row = conn.execute(
+        """
+        INSERT INTO webhook_deliveries (
+          id, event, action, repo_full_name, status, reason, received_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id
+        """,
+        (delivery_id, event, action, repo_full_name, status, reason, _iso(_now())),
     ).fetchone()
-    if existing:
-        return False
-    try:
-        conn.execute(
-            """
-            INSERT INTO webhook_deliveries (
-              id, event, action, repo_full_name, status, reason, received_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (delivery_id, event, action, repo_full_name, status, reason, _iso(_now())),
-        )
-    except Exception as exc:
-        # Two deliveries can pass the SELECT before either INSERT commits.
-        msg = str(exc).lower()
-        if "unique" in msg or "duplicate" in msg:
-            return False
-        raise
-    return True
+    return row is not None

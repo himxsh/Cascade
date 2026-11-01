@@ -7,7 +7,9 @@ import json
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from typing import Any
+from urllib.parse import quote
 
 from api.auth import AuthError, sign_payload, unsign_payload
 from api.settings import env_str
@@ -29,10 +31,11 @@ SETUP_STATE_PURPOSE = "github_setup"
 
 
 class GitHubAppError(Exception):
-    def __init__(self, message: str, status: int = 502):
+    def __init__(self, message: str, status: int = 502, github_status: int | None = None):
         super().__init__(message)
         self.message = message
         self.status = status
+        self.github_status = github_status
 
 
 def make_setup_state(user: dict[str, Any]) -> str:
@@ -129,48 +132,39 @@ def user_may_claim_installation(
     remote: dict[str, Any],
     *,
     state_ok: bool,
-    accessible_ids: set[int] | None = None,
+    org_admin: Callable[[str], bool] | None = None,
 ) -> bool:
     """Personal installs must match the signed-in GitHub user.
 
-    Org installs must be in that user's installation list (from their OAuth
-    token) and carry the signed setup state. State alone is not authorization:
-    any signed-in user can mint one from /api/me and pair it with another
-    installation_id.
+    Org installs need the signed setup state and an active admin membership in
+    that org (checked lazily through `org_admin`). State alone is not
+    authorization: any signed-in user can mint one from /api/me and pair it
+    with another installation_id.
     """
     account_type = str(remote.get("account_type") or remote.get("target_type") or "")
-    account_id = remote.get("account_id")
-    if account_type.lower() == "user" and account_id is not None:
+    if account_type.lower() == "user":
         try:
-            if int(account_id) == int(user["github_user_id"]):
-                return True
-        except (TypeError, ValueError):
+            return int(remote["account_id"]) == int(user["github_user_id"])
+        except (KeyError, TypeError, ValueError):
             return False
-    try:
-        inst_id = int(remote["installation_id"])
-    except (KeyError, TypeError, ValueError):
+    login = str(remote.get("account_login") or "")
+    if not state_ok or not login or org_admin is None:
         return False
-    allowed = accessible_ids or set()
-    return bool(state_ok and inst_id in allowed)
+    return bool(org_admin(login))
 
 
-def list_accessible_installation_ids(user_token: str) -> set[int]:
-    """Installation ids visible to this GitHub App user access token."""
-    found: set[int] = set()
-    for page in range(1, 11):
+def user_is_org_admin(user_token: str, org_login: str) -> bool:
+    """True when the OAuth user is an active admin of `org_login` (needs read:org)."""
+    try:
         data = _http_json(
-            f"{GITHUB_API}/user/installations?per_page=100&page={page}",
+            f"{GITHUB_API}/user/memberships/orgs/{quote(org_login, safe='')}",
             token=user_token,
         )
-        rows = data.get("installations") or []
-        if not isinstance(rows, list) or not rows:
-            break
-        for row in rows:
-            if isinstance(row, dict) and isinstance(row.get("id"), int):
-                found.add(int(row["id"]))
-        if len(rows) < 100:
-            break
-    return found
+    except GitHubAppError as e:
+        if e.github_status == 404:
+            return False
+        raise
+    return data.get("state") == "active" and data.get("role") == "admin"
 
 
 def _b64url(data: bytes) -> str:
@@ -193,8 +187,9 @@ def _http_json(url: str, *, token: str) -> dict[str, Any]:
         detail = e.read().decode()[:400]
         status = 404 if e.code == 404 else 502
         raise GitHubAppError(
-            f"GitHub installation lookup failed ({e.code}): {detail}",
+            f"GitHub API request failed ({e.code}): {detail}",
             status=status,
+            github_status=e.code,
         ) from e
     except urllib.error.URLError as e:
         raise GitHubAppError(f"GitHub unreachable: {e.reason}") from e

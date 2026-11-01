@@ -25,6 +25,7 @@ from api.store import (
     get_session_user,
     list_repos_for_installation,
     list_repos_for_user,
+    record_delivery,
     session_github_token,
     lookup_repo,
     mock_github_repo_id,
@@ -294,7 +295,7 @@ class TestStore(unittest.TestCase):
             self.assertEqual(list_repos_for_installation(conn, 99), [])
 
     def test_session_roundtrip(self) -> None:
-        with get_conn() as conn:
+        with mock.patch.dict(os.environ, {"SESSION_SECRET": "test-secret"}), get_conn() as conn:
             user = upsert_user(conn, github_user_id=0, login="dev")
             token = create_session(conn, int(user["id"]), github_access_token="gho_secret")
             loaded = get_session_user(conn, token)
@@ -304,6 +305,59 @@ class TestStore(unittest.TestCase):
             self.assertNotIn("github_access_token", loaded)
             self.assertEqual(session_github_token(conn, token), "gho_secret")
             self.assertIsNone(get_session_user(conn, "nope"))
+            stored = conn.execute(
+                "SELECT github_access_token FROM sessions WHERE id = ?", (token,)
+            ).fetchone()[0]
+            self.assertNotIn("gho_secret", stored)
+
+    def test_session_token_unreadable_without_matching_secret(self) -> None:
+        with get_conn() as conn:
+            user = upsert_user(conn, github_user_id=4, login="legacy")
+            token = create_session(conn, int(user["id"]))
+            # Plaintext rows from before encryption are treated as missing.
+            conn.execute(
+                "UPDATE sessions SET github_access_token = 'gho_plain' WHERE id = ?", (token,)
+            )
+            with mock.patch.dict(os.environ, {"SESSION_SECRET": "test-secret"}):
+                self.assertIsNone(session_github_token(conn, token))
+                sealed = create_session(conn, int(user["id"]), github_access_token="gho_x")
+            with mock.patch.dict(os.environ, {"SESSION_SECRET": "rotated"}):
+                self.assertIsNone(session_github_token(conn, sealed))
+
+    def test_legacy_sample_repos_on_real_installs_are_dropped(self) -> None:
+        with get_conn() as conn:
+            user = upsert_user(conn, github_user_id=8, login="real")
+            upsert_installation(
+                conn,
+                installation_id=555,
+                account_login="acme",
+                account_type="Organization",
+                installer_user_id=int(user["id"]),
+            )
+            conn.execute(
+                """
+                INSERT INTO repos (installation_id, owner, name, github_repo_id, enabled)
+                VALUES (555, 'acme', 'analytics', 1001, 1)
+                """
+            )
+        reset_bootstrap_cache()
+        with get_conn() as conn:
+            self.assertIsNone(lookup_repo(conn, owner="x", name="y", github_repo_id=1001))
+
+    def test_record_delivery_dedupes_without_raising(self) -> None:
+        with get_conn() as conn:
+            args = dict(
+                delivery_id="d-1",
+                event="ping",
+                action=None,
+                repo_full_name=None,
+                status="received",
+                reason=None,
+            )
+            self.assertTrue(record_delivery(conn, **args))
+            self.assertFalse(record_delivery(conn, **args))
+            # Connection is still usable after the conflict.
+            self.assertIsNotNone(conn.execute("SELECT 1").fetchone())
 
     def test_session_token_column_migrates(self) -> None:
         path = Path(self.tmp.name) / "old.db"
@@ -321,7 +375,9 @@ class TestStore(unittest.TestCase):
         raw.commit()
         raw.close()
         reset_bootstrap_cache()
-        with get_conn(f"sqlite:///{path}") as conn:
+        with mock.patch.dict(os.environ, {"SESSION_SECRET": "test-secret"}), get_conn(
+            f"sqlite:///{path}"
+        ) as conn:
             user = upsert_user(conn, github_user_id=3, login="migrated")
             token = create_session(conn, int(user["id"]), github_access_token="gho_old")
             self.assertEqual(session_github_token(conn, token), "gho_old")
