@@ -67,6 +67,36 @@ def unsign_payload(token: str, max_age: int = STATE_MAX_AGE_SEC) -> dict[str, An
     return payload
 
 
+def _token_fernet() -> Any | None:
+    secret = session_secret()
+    if not secret:
+        return None
+    try:
+        from cryptography.fernet import Fernet
+    except ImportError:  # pragma: no cover — hosted installs ship cryptography
+        return None
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest()))
+
+
+def seal_token(token: str | None) -> str | None:
+    """Encrypt a GitHub token for storage. None when it cannot be stored safely."""
+    fernet = _token_fernet()
+    if not token or fernet is None:
+        return None
+    return fernet.encrypt(token.encode()).decode()
+
+
+def open_token(sealed: str | None) -> str | None:
+    """Decrypt a stored token. Plaintext rows from older builds and rotated secrets give None."""
+    fernet = _token_fernet()
+    if not sealed or fernet is None:
+        return None
+    try:
+        return fernet.decrypt(sealed.encode()).decode()
+    except Exception:
+        return None
+
+
 def oauth_authorize_url(*, redirect_uri: str, next_path: str = "/app") -> str:
     if not oauth_configured():
         raise AuthError("GitHub OAuth is not configured", status=503)
@@ -75,7 +105,7 @@ def oauth_authorize_url(*, redirect_uri: str, next_path: str = "/app") -> str:
         {
             "client_id": env_str("GITHUB_OAUTH_CLIENT_ID"),
             "redirect_uri": redirect_uri,
-            "scope": "read:user",
+            "scope": "read:user read:org",
             "state": state,
         }
     )
@@ -142,4 +172,5 @@ def exchange_code(code: str, redirect_uri: str) -> dict[str, Any]:
         "github_user_id": int(github_id),
         "login": login,
         "avatar_url": str(user.get("avatar_url") or ""),
+        "access_token": str(access),
     }

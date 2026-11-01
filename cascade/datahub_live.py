@@ -133,24 +133,19 @@ SEARCH_DATASETS = """query searchDatasets($query: String!, $count: Int!) {
 }"""
 
 
-_use_fgl = True
-
-
 def fetch_dataset(
     urn: str, gms_url: str | None = None, token: str | None = None
 ) -> dict[str, Any] | None:
-    global _use_fgl
     url = gms_url or _gms_url()
     tok = token or _gms_token()
-    query = GET_DATASET if _use_fgl else GET_DATASET_NO_FGL
     try:
-        result = _graphql(url, query, {"urn": urn}, tok)
+        result = _graphql(url, GET_DATASET, {"urn": urn}, tok)
     except ValueError as e:
-        if _use_fgl and "finegrained" in str(e).lower():
-            _use_fgl = False
-            result = _graphql(url, GET_DATASET_NO_FGL, {"urn": urn}, tok)
-        else:
+        # Retry once per call. A process-wide latch would disable column lineage
+        # for every later request after a single schema error.
+        if "finegrained" not in str(e).lower():
             raise
+        result = _graphql(url, GET_DATASET_NO_FGL, {"urn": urn}, tok)
     data = result.get("data", {}).get("dataset")
     if not data:
         return None

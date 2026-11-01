@@ -19,7 +19,14 @@ def env_str(*names: str) -> str:
 
 
 def dev_login_enabled() -> bool:
+    # Vercel production must not honor the local harness flag.
+    if os.environ.get("VERCEL_ENV", "").strip().lower() == "production":
+        return False
     return env_flag("CASCADE_DEV_LOGIN")
+
+
+def vercel_runtime() -> bool:
+    return bool(os.environ.get("VERCEL"))
 
 
 def oauth_configured() -> bool:

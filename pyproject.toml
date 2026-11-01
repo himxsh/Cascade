@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "cascade-bot"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.11"
 description = "An agent that turns a breaking schema PR into a coordinated migration"
 readme = "README.md"

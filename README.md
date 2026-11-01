@@ -5,7 +5,7 @@
 It does not connect to your warehouse. It does not merge without a human. It coordinates the work that usually lives in Slack threads and stale tickets.
 
 ```text
-pip install cascade-bot
+pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"
 cascade setup
 ```
 
@@ -87,8 +87,10 @@ Warehouses (Snowflake, Postgres, BigQuery, …) work insofar as DataHub already 
 
 ## Install
 
+PyPI still serves `cascade-bot` 0.1.0. That upload predates `cascade setup` and cannot be replaced, so `pip install cascade-bot` then `cascade setup` fails with an unrecognized command. This repo is 0.1.1. Until that version is published, install from git:
+
 ```bash
-pip install cascade-bot
+pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"
 cascade setup
 ```
 
@@ -147,7 +149,7 @@ You need:
 Then:
 
 ```bash
-pip install cascade-bot
+pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"
 cascade setup
 ```
 

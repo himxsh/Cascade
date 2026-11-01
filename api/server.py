@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
@@ -27,6 +29,7 @@ from api.github_app import (
     fetch_installation,
     make_setup_state,
     setup_state_matches,
+    user_is_org_admin,
     user_may_claim_installation,
 )
 from api.settings import (
@@ -38,6 +41,7 @@ from api.settings import (
     dev_login_enabled,
     env_str,
     oauth_configured,
+    vercel_runtime,
     webhook_secret,
 )
 from api.store import (
@@ -54,6 +58,7 @@ from api.store import (
     lookup_repo,
     record_delivery,
     seed_mock_workspace,
+    session_github_token,
     set_repo_enabled,
     upsert_user,
 )
@@ -97,10 +102,14 @@ _log = logging.getLogger("cascade.api")
 
 
 def _static_file(relative: str) -> Path | None:
+    if not relative or relative.startswith(("/", "\\")) or "\\" in relative:
+        return None
     target = (_STATIC / relative).resolve()
-    if str(target).startswith(str(_STATIC_ROOT)) and target.is_file():
-        return target
-    return None
+    try:
+        target.relative_to(_STATIC_ROOT)
+    except ValueError:
+        return None
+    return target if target.is_file() else None
 
 
 def _index_html() -> FileResponse:
@@ -155,7 +164,6 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
@@ -233,22 +241,77 @@ def _app_banner() -> str | None:
     return APP_NOT_READY_BANNER
 
 
+_SAFE_NEXT_PATH_RE = re.compile(r"^/[A-Za-z0-9._~/-]*$")
+_SAFE_NEXT_QUERY_RE = re.compile(r"^[A-Za-z0-9._~%&=+:,/-]*$")
+
+
 def _safe_next(path: str | None) -> str:
     value = (path or "/app").strip() or "/app"
-    if not value.startswith("/") or value.startswith("//"):
+    # Same-origin path plus an optional query (/api/github/setup?installation_id=…).
+    # Reject scheme-relative and backslash forms browsers treat as //host.
+    route, _, query = value.partition("?")
+    if (
+        "//" in route
+        or "\\" in value
+        or _SAFE_NEXT_PATH_RE.fullmatch(route) is None
+        or _SAFE_NEXT_QUERY_RE.fullmatch(query) is None
+    ):
         return "/app"
     return value
 
 
-def _login_and_redirect(request: Request, user_fields: dict[str, Any], next_path: str) -> RedirectResponse:
+def _login_and_redirect(
+    request: Request,
+    user_fields: dict[str, Any],
+    next_path: str,
+    github_access_token: str | None = None,
+) -> RedirectResponse:
     with get_conn() as conn:
         user = upsert_user(conn, **user_fields)
         if not app_configured():
             seed_mock_workspace(conn, int(user["id"]))
-        token = create_session(conn, int(user["id"]))
+        token = create_session(
+            conn,
+            int(user["id"]),
+            github_access_token=github_access_token,
+        )
     response = RedirectResponse(_safe_next(next_path), status_code=302)
     _set_session_cookie(response, request, token)
     return response
+
+
+def _dev_harness_user(user: dict[str, Any]) -> bool:
+    return dev_login_enabled() and int(user["github_user_id"]) == DEV_GITHUB_USER_ID
+
+
+def _org_admin_check(request: Request) -> tuple[Callable[[str], bool], Callable[[], bool]]:
+    """Lazy org-admin lookup, plus a flag for "the stored GitHub token is missing or rejected"."""
+    needs_signin = False
+
+    def check(org_login: str) -> bool:
+        nonlocal needs_signin
+        cookie = request.cookies.get(COOKIE_NAME)
+        with get_conn() as conn:
+            gh = session_github_token(conn, cookie)
+        if not gh:
+            needs_signin = True
+            return False
+        try:
+            return user_is_org_admin(gh, org_login)
+        except GitHubAppError as e:
+            # 401: token revoked. 403: token predates the read:org scope or the
+            # org restricts OAuth apps. A fresh sign-in fixes the first two.
+            needs_signin = e.github_status in (401, 403)
+            return False
+
+    return check, lambda: needs_signin
+
+
+def _setup_redirect(setup_action: str | None) -> RedirectResponse:
+    dest = "/app/repos?installed=1"
+    if setup_action:
+        dest += f"&setup_action={quote(setup_action)}"
+    return RedirectResponse(dest, status_code=302)
 
 
 @app.get("/api/health")
@@ -390,6 +453,7 @@ def api_github_setup(
     state: str | None = None,
     account_login: str | None = None,
     account_type: str | None = None,
+    reauth: int = 0,
 ) -> RedirectResponse:
     user = _current_user(request)
     next_q = str(request.url).split("?", 1)
@@ -401,35 +465,48 @@ def api_github_setup(
     if is_mock_installation_id(installation_id):
         return RedirectResponse("/app/connect?error=invalid_installation", status_code=302)
 
-    claimed_login = account_login or "unknown"
-    claimed_type = account_type or "Organization"
-    state_ok = setup_state_matches(state, user)
-
-    if app_configured():
+    if not app_configured():
+        # Local dev login can attach a fake id. Hosted runtimes and real users cannot
+        # squat an installation id before the App credentials exist.
+        if vercel_runtime() or not _dev_harness_user(user):
+            return RedirectResponse("/app/connect?error=app_not_configured", status_code=302)
         try:
-            remote = fetch_installation(installation_id)
-        except GitHubAppError:
-            return RedirectResponse("/app/connect?error=installation_not_found", status_code=302)
-        if not user_may_claim_installation(user, remote, state_ok=state_ok):
-            return RedirectResponse("/app/connect?error=installation_forbidden", status_code=302)
-        claimed_login = remote["account_login"]
-        claimed_type = remote["account_type"]
+            with get_conn() as conn:
+                adopt_installation(
+                    conn,
+                    user_id=int(user["id"]),
+                    installation_id=installation_id,
+                    account_login=account_login or "unknown",
+                    account_type=account_type or "Organization",
+                )
+        except InstallationOwnershipError:
+            return RedirectResponse("/app/connect?error=installation_owned", status_code=302)
+        return _setup_redirect(setup_action)
 
+    state_ok = setup_state_matches(state, user)
+    try:
+        remote = fetch_installation(installation_id)
+    except GitHubAppError:
+        return RedirectResponse("/app/connect?error=installation_not_found", status_code=302)
+    org_admin, needs_signin = _org_admin_check(request)
+    if not user_may_claim_installation(user, remote, state_ok=state_ok, org_admin=org_admin):
+        if needs_signin() and not reauth:
+            # One retry through OAuth for a token with read:org, then back here.
+            retry = setup_url + ("&" if "?" in setup_url else "?") + "reauth=1"
+            return RedirectResponse(f"/auth/github?next={quote(retry, safe='')}", status_code=302)
+        return RedirectResponse("/app/connect?error=installation_forbidden", status_code=302)
     try:
         with get_conn() as conn:
             adopt_installation(
                 conn,
                 user_id=int(user["id"]),
                 installation_id=installation_id,
-                account_login=claimed_login,
-                account_type=claimed_type,
+                account_login=remote["account_login"],
+                account_type=remote["account_type"],
             )
     except InstallationOwnershipError:
         return RedirectResponse("/app/connect?error=installation_owned", status_code=302)
-    dest = "/app/repos?installed=1"
-    if setup_action:
-        dest += f"&setup_action={quote(setup_action)}"
-    return RedirectResponse(dest, status_code=302)
+    return _setup_redirect(setup_action)
 
 
 @app.get("/auth/github")
@@ -463,7 +540,13 @@ def auth_github_callback(
         gh_user = exchange_code(code, redirect_uri)
     except AuthError as e:
         return RedirectResponse(f"/signin?reason={quote(e.message)}", status_code=302)
-    return _login_and_redirect(request, gh_user, str(payload.get("next") or "/app"))
+    access = str(gh_user.pop("access_token", "") or "") or None
+    return _login_and_redirect(
+        request,
+        gh_user,
+        str(payload.get("next") or "/app"),
+        github_access_token=access,
+    )
 
 
 @app.get("/auth/dev-login")

@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from cascade.diff_parser import parse_diff, load_changes
+from cascade.diff_parser import load_changes, parse_changes_text, parse_diff
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "diffs"
 
@@ -198,6 +198,12 @@ class TestLoadChanges(unittest.TestCase):
             self.assertEqual(changes[0]["from"], "a")
         finally:
             path.unlink(missing_ok=True)
+
+    def test_invalid_json_is_value_error(self):
+        with self.assertRaises(ValueError):
+            parse_changes_text("{not-json")
+        with self.assertRaises(ValueError):
+            parse_changes_text("{\"changes\": \"nope\"}")
 
 
 if __name__ == "__main__":

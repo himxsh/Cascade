@@ -144,6 +144,7 @@ def run_ui_pipeline(
             report_dict,
             out_dir=tmp,
             mark_lifecycle=mark_migrated,
+            audit_root=tmp,
         )
         # Inline artifact bodies so the client does not need the temp path
         apply_dir = Path(tmp)

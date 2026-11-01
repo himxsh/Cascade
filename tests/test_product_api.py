@@ -13,14 +13,22 @@ from unittest import mock
 
 try:
     from fastapi.testclient import TestClient
+    from api.server import _safe_next, _static_file
     from api.server import app as SERVER_APP
 except ImportError:  # pragma: no cover
     TestClient = None  # type: ignore[misc, assignment]
     SERVER_APP = None  # type: ignore[misc, assignment]
+    _safe_next = None  # type: ignore[misc, assignment]
+    _static_file = None  # type: ignore[misc, assignment]
 
 from api.auth import COOKIE_NAME
 from api.db import get_conn, reset_bootstrap_cache
-from api.github_app import GitHubAppError, make_setup_state
+from api.github_app import (
+    GitHubAppError,
+    make_setup_state,
+    user_is_org_admin,
+    user_may_claim_installation,
+)
 from api.store import (
     adopt_installation,
     create_session,
@@ -122,7 +130,7 @@ class TestProductApi(unittest.TestCase):
         self.assertEqual(denied.status_code, 401)
         self.client.get("/auth/dev-login", follow_redirects=False)
         res = self.client.post("/api/run", json={"diff": "{not-json"})
-        self.assertIn(res.status_code, {400, 502})
+        self.assertEqual(res.status_code, 400)
         self.assertNotIn("/var/", res.text)
         self.assertNotIn("cascade/runs", res.text)
 
@@ -132,7 +140,7 @@ class TestProductApi(unittest.TestCase):
             self.assertEqual(denied.status_code, 401)
             self.client.get("/auth/dev-login", follow_redirects=False)
             authed = self.client.post("/api/run", json={"diff": "{not-json"})
-            self.assertIn(authed.status_code, {400, 502})
+            self.assertEqual(authed.status_code, 400)
 
     def test_me_unauthorized(self) -> None:
         res = self.client.get("/api/me")
@@ -311,8 +319,22 @@ class TestProductApi(unittest.TestCase):
         bob_client = TestClient(self.app)
         alice_client.cookies.set(COOKIE_NAME, token_a)
         bob_client.cookies.set(COOKIE_NAME, token_b)
-
-        stolen = bob_client.get("/api/github/setup?installation_id=99", follow_redirects=False)
+        remote = {
+            "installation_id": 99,
+            "account_login": "acme",
+            "account_type": "Organization",
+            "account_id": 555,
+        }
+        with mock.patch("api.server.app_configured", return_value=True), mock.patch(
+            "api.server.fetch_installation", return_value=remote
+        ), mock.patch("api.server.session_github_token", return_value="gho_test"), mock.patch(
+            "api.server.user_is_org_admin", return_value=True
+        ):
+            state = make_setup_state(bob)
+            stolen = bob_client.get(
+                f"/api/github/setup?installation_id=99&state={state}",
+                follow_redirects=False,
+            )
         self.assertEqual(stolen.status_code, 302)
         self.assertIn("installation_owned", stolen.headers["location"])
 
@@ -332,7 +354,7 @@ class TestProductApi(unittest.TestCase):
         self.assertEqual(res.status_code, 302)
         self.assertIn("installation_not_found", res.headers["location"])
 
-    def test_setup_org_requires_state_when_app_configured(self) -> None:
+    def test_setup_org_requires_membership_not_just_state(self) -> None:
         self.client.get("/auth/dev-login", follow_redirects=False)
         me = self.client.get("/api/me").json()
         remote = {
@@ -341,8 +363,12 @@ class TestProductApi(unittest.TestCase):
             "account_type": "Organization",
             "account_id": 555,
         }
-        with mock.patch("api.server.app_configured", return_value=True):
-            with mock.patch("api.server.fetch_installation", return_value=remote):
+        with mock.patch("api.server.app_configured", return_value=True), mock.patch(
+            "api.server.fetch_installation", return_value=remote
+        ):
+            with mock.patch("api.server.session_github_token", return_value="gho_test"), mock.patch(
+                "api.server.user_is_org_admin", return_value=True
+            ):
                 denied = self.client.get(
                     "/api/github/setup?installation_id=77",
                     follow_redirects=False,
@@ -353,7 +379,152 @@ class TestProductApi(unittest.TestCase):
                     f"/api/github/setup?installation_id=77&state={state}",
                     follow_redirects=False,
                 )
+            with mock.patch("api.server.session_github_token", return_value="gho_test"), mock.patch(
+                "api.server.user_is_org_admin", return_value=False
+            ):
+                outsider = self.client.get(
+                    f"/api/github/setup?installation_id=77&state={make_setup_state(me)}",
+                    follow_redirects=False,
+                )
         self.assertIn("/app/repos", accepted.headers["location"])
+        self.assertIn("installation_forbidden", outsider.headers["location"])
+
+    def test_state_alone_does_not_grant_an_installation(self) -> None:
+        user = {"id": 1, "github_user_id": 10}
+        org = {
+            "installation_id": 77,
+            "account_login": "acme",
+            "account_type": "Organization",
+            "account_id": 555,
+        }
+        yes = lambda login: login == "acme"  # noqa: E731
+        no = lambda login: False  # noqa: E731
+        self.assertFalse(user_may_claim_installation(user, org, state_ok=True))
+        self.assertFalse(user_may_claim_installation(user, org, state_ok=True, org_admin=no))
+        self.assertTrue(user_may_claim_installation(user, org, state_ok=True, org_admin=yes))
+        self.assertFalse(user_may_claim_installation(user, org, state_ok=False, org_admin=yes))
+        own = {"installation_id": 3, "account_type": "User", "account_id": 10}
+        self.assertTrue(user_may_claim_installation(user, own, state_ok=False))
+        other = {"installation_id": 3, "account_login": "acme", "account_type": "User", "account_id": 11}
+        self.assertFalse(user_may_claim_installation(user, other, state_ok=True, org_admin=yes))
+
+    def test_personal_install_skips_github_membership_call(self) -> None:
+        user = {"id": 1, "github_user_id": 10}
+        own = {"installation_id": 3, "account_type": "User", "account_id": 10}
+        check = mock.Mock(return_value=True)
+        self.assertTrue(user_may_claim_installation(user, own, state_ok=True, org_admin=check))
+        self.assertFalse(
+            user_may_claim_installation(
+                user,
+                {"installation_id": 7, "account_login": "acme", "account_type": "Organization"},
+                state_ok=False,
+                org_admin=check,
+            )
+        )
+        check.assert_not_called()
+
+    def test_user_is_org_admin(self) -> None:
+        with mock.patch(
+            "api.github_app._http_json", return_value={"state": "active", "role": "admin"}
+        ) as http:
+            self.assertTrue(user_is_org_admin("gho_test", "acme"))
+        self.assertTrue(http.call_args[0][0].endswith("/user/memberships/orgs/acme"))
+        with mock.patch(
+            "api.github_app._http_json", return_value={"state": "active", "role": "member"}
+        ):
+            self.assertFalse(user_is_org_admin("gho_test", "acme"))
+        with mock.patch(
+            "api.github_app._http_json", return_value={"state": "pending", "role": "admin"}
+        ):
+            self.assertFalse(user_is_org_admin("gho_test", "acme"))
+        with mock.patch(
+            "api.github_app._http_json",
+            side_effect=GitHubAppError("nope", status=404, github_status=404),
+        ):
+            self.assertFalse(user_is_org_admin("gho_test", "acme"))
+
+    def test_setup_without_usable_token_signs_in_again_once(self) -> None:
+        self.client.get("/auth/dev-login", follow_redirects=False)
+        me = self.client.get("/api/me").json()
+        remote = {
+            "installation_id": 77,
+            "account_login": "acme",
+            "account_type": "Organization",
+            "account_id": 555,
+        }
+        state = make_setup_state(me)
+        with mock.patch("api.server.app_configured", return_value=True), mock.patch(
+            "api.server.fetch_installation", return_value=remote
+        ):
+            with mock.patch("api.server.session_github_token", return_value=None):
+                missing = self.client.get(
+                    f"/api/github/setup?installation_id=77&state={state}",
+                    follow_redirects=False,
+                )
+                looped = self.client.get(
+                    f"/api/github/setup?installation_id=77&state={state}&reauth=1",
+                    follow_redirects=False,
+                )
+            with mock.patch("api.server.session_github_token", return_value="gho_old"), mock.patch(
+                "api.server.user_is_org_admin",
+                side_effect=GitHubAppError("scope", github_status=403),
+            ):
+                rejected = self.client.get(
+                    f"/api/github/setup?installation_id=77&state={state}",
+                    follow_redirects=False,
+                )
+        for res in (missing, rejected):
+            loc = res.headers["location"]
+            self.assertTrue(loc.startswith("/auth/github?next="), loc)
+            self.assertIn("reauth%3D1", loc)
+        self.assertIn("installation_forbidden", looped.headers["location"])
+
+    def test_oauth_user_cannot_squat_installation_before_app_exists(self) -> None:
+        with get_conn() as conn:
+            user = upsert_user(conn, github_user_id=10, login="alice")
+            token = create_session(conn, int(user["id"]))
+        client = TestClient(self.app)
+        client.cookies.set(COOKIE_NAME, token)
+        res = client.get("/api/github/setup?installation_id=99", follow_redirects=False)
+        self.assertIn("app_not_configured", res.headers["location"])
+
+    def test_hosted_dev_login_cannot_squat_installation(self) -> None:
+        self.client.get("/auth/dev-login", follow_redirects=False)
+        with mock.patch.dict(os.environ, {"VERCEL": "1"}, clear=False):
+            res = self.client.get("/api/github/setup?installation_id=99", follow_redirects=False)
+        self.assertIn("app_not_configured", res.headers["location"])
+
+    def test_dev_login_disabled_in_production(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"VERCEL_ENV": "production", "CASCADE_DEV_LOGIN": "1"},
+            clear=False,
+        ):
+            res = self.client.get("/auth/dev-login", follow_redirects=False)
+        self.assertEqual(res.status_code, 404)
+
+    def test_login_next_stays_on_site(self) -> None:
+        self.assertEqual(_safe_next("/app/repos"), "/app/repos")
+        setup = "/api/github/setup?installation_id=123&state=eyJ0cyI6MX0.ab12&setup_action=install"
+        self.assertEqual(_safe_next(setup), setup)
+        self.assertEqual(_safe_next("/app/repos?installed=1"), "/app/repos?installed=1")
+        for bad in (
+            "https://evil.example",
+            "//evil.example",
+            "/\\evil.example",
+            "/evil example",
+            "/app?x=1\r\nSet-Cookie:a",
+            "/app?x=<script>",
+        ):
+            self.assertEqual(_safe_next(bad), "/app")
+            res = self.client.get("/auth/dev-login", params={"next": bad}, follow_redirects=False)
+            self.assertTrue(res.headers["location"].startswith("/app"), res.headers["location"])
+            self.assertNotIn("evil.example", res.headers["location"])
+
+    def test_static_file_stays_in_bundle(self) -> None:
+        self.assertIsNone(_static_file("../pyproject.toml"))
+        self.assertIsNone(_static_file("..\\pyproject.toml"))
+        self.assertIsNone(_static_file("/etc/passwd"))
 
     def test_webhook_enabled_repo_accepted(self) -> None:
         self.client.get("/auth/dev-login", follow_redirects=False)
@@ -402,6 +573,38 @@ class TestProductApi(unittest.TestCase):
             },
         )
         self.assertEqual(skipped.json()["reason"], "remediation_branch")
+
+    def test_webhook_mock_name_does_not_match_a_real_repo_id(self) -> None:
+        self.client.get("/auth/dev-login", follow_redirects=False)
+        listed = self.client.get("/api/repos").json()["repos"]
+        target = next(r for r in listed if r["name"] == "analytics")
+        self.assertLess(int(target["github_repo_id"]), 0)
+        self.client.patch("/api/repos", json={"id": target["id"], "enabled": True})
+        payload = {
+            "action": "opened",
+            "installation": {"id": 555},
+            "repository": {
+                "id": 1001,
+                "name": "analytics",
+                "full_name": "acme/analytics",
+                "owner": {"login": "acme"},
+            },
+            "pull_request": {"head": {"ref": "feat/rename"}},
+        }
+        body = json.dumps(payload).encode()
+        res = self.client.post(
+            "/api/github/webhook",
+            content=body,
+            headers={
+                "X-Hub-Signature-256": _sign(body, self.secret),
+                "X-GitHub-Event": "pull_request",
+                "X-GitHub-Delivery": "deliv-real-id",
+                "Content-Type": "application/json",
+            },
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["status"], "skipped")
+        self.assertEqual(res.json()["reason"], "unknown_repo")
 
     def test_webhook_missing_secret(self) -> None:
         with mock.patch.dict(os.environ, {"GITHUB_WEBHOOK_SECRET": ""}, clear=False):
