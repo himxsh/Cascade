@@ -5,7 +5,7 @@
 It does not connect to your warehouse. It does not merge without a human. It coordinates the work that usually lives in Slack threads and stale tickets.
 
 ```text
-pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"
+pip install cascade-bot
 cascade setup
 ```
 
@@ -87,10 +87,8 @@ Warehouses (Snowflake, Postgres, BigQuery, …) work insofar as DataHub already 
 
 ## Install
 
-PyPI still serves `cascade-bot` 0.1.0. That upload predates `cascade setup` and cannot be replaced, so `pip install cascade-bot` then `cascade setup` fails with an unrecognized command. This repo is 0.1.1. Until that version is published, install from git:
-
 ```bash
-pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"
+pip install cascade-bot
 cascade setup
 ```
 
@@ -149,7 +147,7 @@ You need:
 Then:
 
 ```bash
-pip install "cascade-bot @ git+https://github.com/himxsh/Cascade.git"
+pip install cascade-bot
 cascade setup
 ```
 
@@ -318,6 +316,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Issues and pull requests are welcome.
 pip install -e ".[dev]"
 python -m unittest discover -s tests -v
 ```
+
+To release, bump `version` in `pyproject.toml` and `cascade/__init__.py` and merge to `main`. [`publish.yml`](.github/workflows/publish.yml) uploads any version PyPI does not have yet.
 
 ## License
 
