@@ -44,3 +44,7 @@ demo/check_mean_graph.py
 demo/fixtures/mean_graph.json
 tests/test_mean_fixture.py
 
+
+# Local launch-video output
+brag-output/
+showreel/
