@@ -9,7 +9,7 @@
   ],
   "urn_files": {},
   "rewrite": {
-    "mode": "deterministic",
+    "mode": "off",
     "provider": "openai",
     "model": ""
   }

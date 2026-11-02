@@ -44,27 +44,27 @@ class TestInit(unittest.TestCase):
             self.assertTrue((root / ".github" / "workflows" / "cascade.yml").is_file())
             self.assertTrue(any(n.startswith("wrote") for n in notes))
             cfg = json.loads((root / ".cascade" / "config.json").read_text())
-            self.assertEqual(cfg["rewrite"]["mode"], "deterministic")
+            self.assertEqual(cfg["rewrite"]["mode"], "off")
             again = run_init(root)
             self.assertTrue(any("skip" in n for n in again))
 
 
 class TestRewriteMode(unittest.TestCase):
-    def test_default_deterministic(self):
+    def test_default_off(self):
         env = {k: v for k, v in os.environ.items() if k != "CASCADE_MODE"}
         with mock.patch.dict(os.environ, env, clear=True):
-            self.assertEqual(resolve_rewrite_mode(None), "deterministic")
+            self.assertEqual(resolve_rewrite_mode(None), "off")
 
     def test_cli_beats_env(self):
         with mock.patch.dict(os.environ, {"CASCADE_MODE": "llm"}, clear=False):
-            self.assertEqual(resolve_rewrite_mode("deterministic"), "deterministic")
+            self.assertEqual(resolve_rewrite_mode("deterministic"), "off")
 
     def test_explicit_config_path_used_for_rewrite_mode(self):
         env = {k: v for k, v in os.environ.items() if k != "CASCADE_MODE"}
         with tempfile.TemporaryDirectory() as td:
             cwd_cfg = Path(td) / ".cascade"
             cwd_cfg.mkdir()
-            (cwd_cfg / "config.json").write_text(json.dumps({"rewrite": {"mode": "deterministic"}}))
+            (cwd_cfg / "config.json").write_text(json.dumps({"rewrite": {"mode": "off"}}))
             other = Path(td) / "other.json"
             other.write_text(json.dumps({"rewrite": {"mode": "llm", "provider": "openai", "model": "gpt-4o"}}))
             loaded = load_config(other)
@@ -72,7 +72,7 @@ class TestRewriteMode(unittest.TestCase):
                 old = Path.cwd()
                 os.chdir(td)
                 try:
-                    self.assertEqual(resolve_rewrite_mode(None), "deterministic")
+                    self.assertEqual(resolve_rewrite_mode(None), "off")
                     self.assertEqual(resolve_rewrite_mode(None, config=loaded), "llm")
                 finally:
                     os.chdir(old)

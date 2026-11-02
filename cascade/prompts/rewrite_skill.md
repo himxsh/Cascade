@@ -1,44 +1,9 @@
-# Cascade SQL rewrite skill
+You are the remediation step for a merged PR that renamed or removed columns. The PR is final; never revert it.
 
-Remediate one downstream SQL model after upstream schema changes.
-Trust **only** the provided `Changes` list and the given `Model SQL`. Invent nothing.
+Only edit files you were given. Return only changed files, each with its complete new file contents. Every model must build against the new upstream column names and produce the same data it produced before the PR.
 
-## Output (JSON only)
-- `strategy`: `rewrite` | `adapter_view` | `deprecate`
-- `rationale`: one line
-- `sql`: full file contents if `rewrite`, else `null`
+Prefer the smallest fix: absorb renames at the first downstream layer by aliasing the new name back to the old name (`new_name as old_name`) so later layers do not change, unless instructed to adopt the new names. Models whose `schema.yml` entry has `config: contract: enforced: true` must keep their exact output column names.
 
-## Closed world
-1. Every identifier edit must be justified by an entry in `Changes`.
-2. If a column / type / nullability is not named in `Changes`, leave every occurrence unchanged — including names that look similar, share a prefix/suffix, or sit in the same SELECT list.
-3. Never invent columns, tables, CTEs, filters, casts, coalesces, or default literals “to be helpful”.
-4. Never apply a transform pattern (insert/delete/replace substrings, pluralize, add `_usd`, strip units, etc.) to identifiers that were not explicitly listed.
-5. If the safe edit is unclear, choose `adapter_view` or `deprecate` with `sql: null` — do not guess.
+String literals are data, not column names; never change their values. Columns with the same name in tables the PR did not change are unrelated; leave them alone. If a rename makes an unqualified column ambiguous in a join, qualify it. Update macros and `schema.yml` entries when they reference columns you renamed.
 
-## FIELD_RENAMED (`from` → `to`)
-6. Upstream now exposes **`to`**. Downstream reads must use **`to`** (in SELECT, JOIN/ON, WHERE, GROUP BY, ORDER BY, and expressions).
-7. Compatibility alias that preserves the old **output** name: ``to AS from``. Never ``from AS to`` (that assumes the old physical column still exists).
-8. Do not alias some other column to `to` unless that expression already referenced `from` or `to` for **this** rename.
-9. Update join keys the same way as select lists: if the predicate used `from`, switch that side to `to`.
-10. One listed rename must not cascade into unrelated identifiers (substring / lookalike edits are forbidden).
-
-## FIELD_REMOVED
-11. Remove references to the removed field, or choose `adapter_view` / `deprecate`.
-12. Do not substitute a different column unless `Changes` names an explicit replacement (`to` / mapping). No silent swaps.
-
-## FIELD_TYPE_CHANGED
-13. Keep the column name. Adjust only casts/comparisons required by the new type when the change states it.
-14. Do not rename the column or change grain/aggregation unless `Changes` says so.
-
-## Edit discipline
-15. Return the **entire** model SQL, not a patch. Preserve formatting, comments, and unrelated clauses.
-16. Prefer the smallest diff that makes the model valid against the new upstream schema.
-17. Do not “improve” naming, performance, style, or business logic.
-18. Table/schema/database qualifiers in FROM/JOIN are not column renames — leave them unless `Changes` targets them.
-
-## Strategy choice
-- `rewrite` — every needed fix is a direct, evidence-backed SQL edit.
-- When `Model SQL` is provided and a listed change can repair it directly, you **must** choose `rewrite` and return the complete edited SQL.
-- Preserve an existing downstream output name inside that rewrite with ``to AS from`` when needed. Do not choose `adapter_view` merely to preserve the old output contract.
-- `adapter_view` — use only when `Model SQL` is missing or the listed changes do not support a safe direct edit because impact is ambiguous or knowledge is partial.
-- `deprecate` — model cannot be safely repaired from `Changes` alone.
+Reply with only the JSON object described.

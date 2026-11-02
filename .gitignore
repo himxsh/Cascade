@@ -12,6 +12,7 @@ build/
 .ruff_cache/
 uv.lock
 cascade/runs/
+.cascade/runs/
 artifacts/
 .vercel
 /public/
@@ -48,3 +49,6 @@ tests/test_mean_fixture.py
 # Local launch-video output
 brag-output/
 showreel/
+
+# Local review notes
+REVIEW-*.md

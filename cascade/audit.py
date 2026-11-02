@@ -1,4 +1,4 @@
-"""Run audit directory under cascade/runs/<id>/."""
+"""Run audit directory under .cascade/runs/<id>/."""
 
 from __future__ import annotations
 
@@ -34,9 +34,9 @@ def write_run_audit(
     apply_out: str | Path,
     root: str | Path | None = None,
 ) -> Path:
-    """Copy key apply artifacts into cascade/runs/<id>/ for operator audit."""
+    """Copy key apply artifacts into .cascade/runs/<id>/ for operator audit."""
     base = Path(root) if root is not None else Path.cwd()
-    runs = (base / "cascade" / "runs").resolve()
+    runs = (base / ".cascade" / "runs").resolve()
     run_dir = runs / _safe_run_id(run_id)  # no separators, so it cannot leave runs/
     run_dir.mkdir(parents=True, exist_ok=True)
 

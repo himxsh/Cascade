@@ -38,7 +38,7 @@ flowchart LR
 1. A pull request changes SQL, dbt models, or `schema.yml`.
 2. Cascade maps the changed paths to DataHub URNs (`.cascade/config.json`).
 3. It walks downstream lineage, owners, and ML features.
-4. It rewrites affected SQL (deterministic rename, or LLM with a schema gate).
+4. In LLM mode, it rewrites affected SQL and dbt files.
 5. It comments on the source PR (clear, or a summary with `/cascade stack`).
 6. On `/cascade stack`, it opens `cascade/remediation/<pr>` on top of this PR's commits.
 7. On merge, it can mark the source `cascade:migrated` in DataHub.
@@ -171,7 +171,7 @@ Copy `.env.example` → `.env` if you want a local file (never commit `.env`). L
   ],
   "urn_files": {},
   "rewrite": {
-    "mode": "deterministic",
+    "mode": "off",
     "provider": "openai",
     "model": ""
   }
@@ -235,13 +235,13 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. Consumer CI s
 
 ## Rewrite modes
 
-`CASCADE_MODE=deterministic` (default) or `llm`. CLI: `--rewrite deterministic|llm`. Env wins over `.cascade/config.json`.
+`CASCADE_MODE=off` (default) produces a report only. Set `CASCADE_MODE=llm` to enable rewrites. Env wins over `.cascade/config.json`.
 
 
 | Mode            | Behavior                                                                                                                                                                                                                                       |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deterministic` | Word-boundary column rename + schema gate. No LLM network.                                                                                                                                                                                     |
-| `llm`           | One chat call per downstream node (OpenAI-compatible HTTP). Requires `LLM_API_KEY` (or `OPENAI_API_KEY`) and `LLM_MODEL`. Schema gate still rejects invented columns. Timeout / parse / gate failure falls back to deterministic and logs why. |
+| `off`           | Report only. No remediations are produced.                                                                                                                                                                                                                |
+| `llm`           | One call edits all affected SQL models, macros, and `schema.yml` files. Requires `LLM_API_KEY` (or `OPENAI_API_KEY`) and `LLM_MODEL`. There is no fallback; on failure Cascade posts the report only. Tested with Claude Sonnet 5.5 at medium effort. |
 
 
 Providers (`CASCADE_LLM_PROVIDER`): `openai`, `anthropic`, `azure-openai`, `bedrock`, `ollama`, `custom` (`custom` requires `LLM_BASE_URL`).
@@ -255,7 +255,7 @@ A key in the environment does **not** turn LLM on. Mode must be `llm`.
 | ---------------------------------------------------------- | -------------------------------------------- |
 | `DATAHUB_GMS_URL` / `DATAHUB_TOKEN`                        | `--source live` and live write-back          |
 | `CASCADE_SOURCE_URN`                                       | URN when path mapping misses                 |
-| `CASCADE_MODE`                                             | `deterministic` (default) or `llm`           |
+| `CASCADE_MODE`                                             | `off` (default) or `llm`                     |
 | `CASCADE_LLM_PROVIDER` / `LLM_MODEL` / `LLM_BASE_URL`      | LLM path                                     |
 | `LLM_API_KEY` or `OPENAI_API_KEY`                          | LLM path                                     |
 | `CASCADE_WRITEBACK=1`                                      | Live DataHub/ML tags (never on untrusted CI) |
@@ -277,8 +277,8 @@ See `.env.example`. Actions secrets override `.env`. There are no warehouse cred
 | Policy         | `severity=high` + `/cascade stack` requires an open stacked PR (`--require-policy`)                                        |
 | Comments       | Re-runs **edit** the existing `## Cascade impact report` comment (clear, or summary + stack option)                        |
 | Stacked PR     | Opt-in via `/cascade stack`. Same upstream PR → `cascade/remediation/{n}` on top of the source commits                     |
-| Audit          | Receipts under `cascade/runs/<id>/` (gitignored)                                                                           |
-| Failures       | No GMS on consumer CI → fail; no `CASCADE_OPEN_DOWNSTREAM_PR` → patch artifacts only; LLM failure → deterministic fallback |
+| Audit          | Receipts under `.cascade/runs/<id>/` (gitignored)                                                                           |
+| Failures       | No GMS on consumer CI → fail; no `CASCADE_OPEN_DOWNSTREAM_PR` → patch artifacts only; LLM failure → report only |
 
 
 Dialect-specific quoting (BigQuery backticks, Snowflake `QUALIFY`, mixed-case Postgres identifiers) is not modeled yet. Plain `user_id` → `customer_id` in vanilla dbt SQL is the supported case.

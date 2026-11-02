@@ -37,9 +37,12 @@ GOLDEN_SQL = ROOT / "tests" / "golden" / "raw_orders_rename" / "expected_fct_ord
 
 
 class TestComment(unittest.TestCase):
+    def add_llm_remediation(self, report):
+        report["remediations"] = [{"urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.fct_orders,PROD)", "path": "examples/models/stg_orders.sql", "strategy": "rewrite", "rationale": "rename user_id", "rewritten_sql": GOLDEN_SQL.read_text(), "agent": "llm"}]
+
     def test_includes_blast_radius_and_rationale(self):
         report = json.loads(GOLDEN_REPORT.read_text())
-        report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
+        self.add_llm_remediation(report)
         md = build_pr_comment(report)
         self.assertIn("Cascade impact report", md)
         self.assertIn("fct_orders", md)
@@ -66,14 +69,13 @@ class TestComment(unittest.TestCase):
 
     def test_remediation_pr_has_mermaid_not_diff(self):
         report = json.loads(GOLDEN_REPORT.read_text())
-        report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
-        report["remediations"][1]["agent"] = "deterministic"
+        self.add_llm_remediation(report)
         md = build_remediation_pr_body(report)
         self.assertIn("```mermaid", md)
         self.assertIn("What could break", md)
         self.assertIn("How Cascade fixed it", md)
         self.assertIn("fct_orders", md)
-        self.assertIn("deterministic", md)
+        self.assertIn("llm", md)
         self.assertNotIn("```diff", md)
         self.assertIn("**Source:**", md)
 
@@ -312,7 +314,7 @@ class TestApply(unittest.TestCase):
 
     def test_run_apply_dry_run_end_to_end(self):
         report = json.loads(GOLDEN_REPORT.read_text())
-        report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
+        report["remediations"] = [{"urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.fct_orders,PROD)", "path": "examples/models/fct_orders.sql", "strategy": "rewrite", "rationale": "rename user_id", "rewritten_sql": GOLDEN_SQL.read_text(), "agent": "llm"}]
         with tempfile.TemporaryDirectory() as tmp:
             env = {k: v for k, v in os.environ.items() if k not in ("GITHUB_TOKEN", "CASCADE_WRITEBACK", "CASCADE_OPEN_DOWNSTREAM_PR")}
             with mock.patch.dict(os.environ, env, clear=True):
@@ -339,7 +341,7 @@ class TestApply(unittest.TestCase):
 
     def test_stack_apply_posts_new_comment_not_impact(self):
         report = json.loads(GOLDEN_REPORT.read_text())
-        report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
+        report["remediations"] = [{"urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.fct_orders,PROD)", "path": "examples/models/fct_orders.sql", "strategy": "rewrite", "rationale": "rename user_id", "rewritten_sql": GOLDEN_SQL.read_text(), "agent": "llm"}]
         posted: dict[str, Any] = {}
 
         def fake_post(body, **kwargs):
