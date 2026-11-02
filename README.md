@@ -317,7 +317,7 @@ pip install -e ".[dev]"
 python -m unittest discover -s tests -v
 ```
 
-To release, bump `version` in `pyproject.toml` and `cascade/__init__.py` and merge to `main`. [`publish.yml`](.github/workflows/publish.yml) uploads any version PyPI does not have yet.
+To release, bump `__version__` in `cascade/__init__.py` (the only place the version lives) and merge to `main`. [`publish.yml`](.github/workflows/publish.yml) uploads any version PyPI does not have yet. CI fails a PR that changes `cascade/` without a bump; add the `no-release` label to skip that.
 
 ## License
 
