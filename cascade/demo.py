@@ -55,6 +55,7 @@ def run_demo(
         report_dict,
         out_dir=apply_dir,
         mark_lifecycle=mark_migrated,
+        audit_root=out,
     )
     result = {
         "urn": urn,

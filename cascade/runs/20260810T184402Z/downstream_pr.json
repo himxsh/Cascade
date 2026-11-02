@@ -1,0 +1,16 @@
+{
+  "title": "Cascade: remediate downstream schema break",
+  "body": "## Cascade impact report\n\n**Source:** `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)`\n**Severity:** `high`\n\n### Schema changes\n\n- `FIELD_RENAMED`: `user_id` \u2192 `customer_id` (detected_by=heuristic)\n\n### Blast radius\n\n- `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)` \u2014 owners: urn:li:corpuser:alice\n- `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)` \u2014 owners: urn:li:corpuser:alice\n- `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)` \u2014 owners: urn:li:corpuser:bob\n\n### Agent remediations\n\n- **adapter_view** (`urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)`)\n  - _no SQL model found for downstream node; recommend adapter view to alias user_id->customer_id while downstream migrates_\n- **rewrite** (`/Users/himeshjain/Desktop/Hackathons/Cascade/examples/models/fct_orders.sql`)\n  - _downstream SQL fct_orders.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change_\n- **adapter_view** (`urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)`)\n  - _no SQL model found for downstream node; recommend adapter view to alias user_id->customer_id while downstream migrates_\n\n### ML impact\n\n- `urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)` via `user_id` \u2192 `retrain-suggested`\n",
+  "files": [
+    "/Users/himeshjain/Desktop/Hackathons/Cascade/examples/models/fct_orders.sql"
+  ],
+  "reviewers": [
+    "alice",
+    "bob"
+  ],
+  "branch": "cascade/remediation/manual",
+  "base": "main",
+  "upstream_pr": null,
+  "dry_run": true,
+  "opened": false
+}

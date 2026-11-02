@@ -140,7 +140,10 @@ def run_doctor(root: Path | None = None, *, require_gms: bool = True) -> tuple[l
         rc = 1
 
     mode = resolve_rewrite_mode(config=cfg)
-    lines.append(f"ok   rewrite mode {mode}")
+    if mode == "off":
+        lines.append("ok   rewrite is off (report only; set CASCADE_MODE=llm to enable fixes)")
+    else:
+        lines.append(f"ok   rewrite mode {mode}")
     if mode == "llm":
         key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
         model = os.environ.get("LLM_MODEL") or cfg.rewrite_model

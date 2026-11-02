@@ -1,0 +1,44 @@
+{
+  "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+  "actions": [
+    {
+      "op": "remove_tags",
+      "tags": [
+        "cascade:breaking-pending"
+      ]
+    },
+    {
+      "op": "add_tags",
+      "tags": [
+        "cascade:migrated"
+      ]
+    },
+    {
+      "op": "update_description",
+      "description": "[2026-08-22] Cascade: remediation merged (cascade:migrated)."
+    }
+  ],
+  "aspects": [
+    {
+      "aspectName": "tagProperties",
+      "entityUrn": "urn:li:tag:cascade:migrated",
+      "name": "cascade:migrated"
+    },
+    {
+      "aspectName": "globalTags",
+      "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+      "tags": [
+        "urn:li:tag:cascade:migrated"
+      ],
+      "removed": [
+        "urn:li:tag:cascade:breaking-pending"
+      ]
+    },
+    {
+      "aspectName": "editableDatasetProperties",
+      "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+      "description": "[2026-08-22] Cascade: remediation merged (cascade:migrated)."
+    }
+  ],
+  "dry_run": true
+}

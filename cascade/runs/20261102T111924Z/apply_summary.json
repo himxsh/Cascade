@@ -1,0 +1,159 @@
+{
+  "out_dir": "/var/folders/57/f8nddjxx1rd2zsc1hh1lwd4w0000gn/T/tmpcamiyyq4/apply",
+  "mode": "dry-run",
+  "comment": {
+    "dry_run": true,
+    "posted": false,
+    "path": "/var/folders/57/f8nddjxx1rd2zsc1hh1lwd4w0000gn/T/tmpcamiyyq4/apply/pr_comment.md"
+  },
+  "downstream_pr": {
+    "dry_run": true,
+    "opened": false,
+    "files": [],
+    "reviewers": [
+      "alice",
+      "bob"
+    ],
+    "branch": "cascade/remediation/manual",
+    "patch_bytes": 0
+  },
+  "datahub_writeback": {
+    "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+    "actions": [
+      {
+        "op": "save_document",
+        "title": "Cascade change plan",
+        "body": "## Cascade impact report\n\n**What changed:** user_id to customer_id on `raw_orders`\n**Downstream:** 3 models (high)\n**Agent:** deterministic\n\n```mermaid\nflowchart LR\n  s_raw_orders[\"raw_orders: user_id to customer_id\"]\n  d0_stg_orders[\"stg_orders\"]\n  s_raw_orders --> d0_stg_orders\n  d1_fct_orders[\"fct_orders\"]\n  s_raw_orders --> d1_fct_orders\n  d2_features_orders[\"features_orders\"]\n  s_raw_orders --> d2_features_orders\n```\n\n**ML:** retrain suggested for `churn_predictor`\n\n**Source:** `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)`\n"
+      },
+      {
+        "op": "add_tags",
+        "tags": [
+          "cascade:breaking-pending"
+        ]
+      },
+      {
+        "op": "update_description",
+        "description": "[2026-11-02] Cascade: breaking schema change pending remediation."
+      }
+    ],
+    "aspects": [
+      {
+        "aspectName": "tagProperties",
+        "entityUrn": "urn:li:tag:cascade:breaking-pending",
+        "name": "cascade:breaking-pending"
+      },
+      {
+        "aspectName": "globalTags",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+        "tags": [
+          "urn:li:tag:cascade:breaking-pending"
+        ]
+      },
+      {
+        "aspectName": "editableDatasetProperties",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+        "description": "[2026-11-02] Cascade: breaking schema change pending remediation."
+      },
+      {
+        "aspectName": "institutionalMemory",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+        "title": "Cascade change plan",
+        "body": "## Cascade impact report\n\n**What changed:** user_id to customer_id on `raw_orders`\n**Downstream:** 3 models (high)\n**Agent:** deterministic\n\n```mermaid\nflowchart LR\n  s_raw_orders[\"raw_orders: user_id to customer_id\"]\n  d0_stg_orders[\"stg_orders\"]\n  s_raw_orders --> d0_stg_orders\n  d1_fct_orders[\"fct_orders\"]\n  s_raw_orders --> d1_fct_orders\n  d2_features_orders[\"features_orders\"]\n  s_raw_orders --> d2_features_orders\n```\n\n**ML:** retrain suggested for `churn_predictor`\n\n**Source:** `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)`\n"
+      }
+    ],
+    "dry_run": true
+  },
+  "ml_writeback": [
+    {
+      "urn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+      "actions": [
+        {
+          "op": "add_tags",
+          "tags": [
+            "cascade:retrain-suggested"
+          ]
+        },
+        {
+          "op": "save_document",
+          "title": "Cascade ML incident",
+          "body": "Feature `user_id` changed; retrain suggested for `urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)`."
+        }
+      ],
+      "aspects": [
+        {
+          "aspectName": "tagProperties",
+          "entityUrn": "urn:li:tag:cascade:retrain-suggested",
+          "name": "cascade:retrain-suggested"
+        },
+        {
+          "aspectName": "globalTags",
+          "entityUrn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+          "tags": [
+            "urn:li:tag:cascade:retrain-suggested"
+          ]
+        },
+        {
+          "aspectName": "institutionalMemory",
+          "entityUrn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+          "title": "Cascade ML incident",
+          "body": "Feature `user_id` changed; retrain suggested for `urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)`."
+        }
+      ],
+      "dry_run": true
+    }
+  ],
+  "migrated": {
+    "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+    "actions": [
+      {
+        "op": "remove_tags",
+        "tags": [
+          "cascade:breaking-pending"
+        ]
+      },
+      {
+        "op": "add_tags",
+        "tags": [
+          "cascade:migrated"
+        ]
+      },
+      {
+        "op": "update_description",
+        "description": "[2026-11-02] Cascade: remediation merged (cascade:migrated)."
+      }
+    ],
+    "aspects": [
+      {
+        "aspectName": "tagProperties",
+        "entityUrn": "urn:li:tag:cascade:migrated",
+        "name": "cascade:migrated"
+      },
+      {
+        "aspectName": "globalTags",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+        "tags": [
+          "urn:li:tag:cascade:migrated"
+        ],
+        "removed": [
+          "urn:li:tag:cascade:breaking-pending"
+        ]
+      },
+      {
+        "aspectName": "editableDatasetProperties",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+        "description": "[2026-11-02] Cascade: remediation merged (cascade:migrated)."
+      }
+    ],
+    "dry_run": true
+  },
+  "policy": {
+    "ok": true,
+    "code": "pass",
+    "message": "policy ok",
+    "severity": "high",
+    "remediation_open": false,
+    "stack_requested": false
+  },
+  "run_id": "20261102T111924Z",
+  "run_dir": "/Users/himeshjain/Desktop/projects/Hackathons/Cascade/cascade/runs/20261102T111924Z"
+}

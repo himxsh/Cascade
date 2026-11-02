@@ -7,6 +7,31 @@ from pathlib import Path
 from typing import Any
 
 
+def merge_catalogs(catalogs: list[dict[str, Any]]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for catalog in catalogs:
+        for key, value in catalog.items():
+            if isinstance(value, dict):
+                target = merged.setdefault(key, {})
+                for subkey, item in value.items():
+                    if subkey not in target:
+                        target[subkey] = item
+                    elif isinstance(target[subkey], list) and isinstance(item, list):
+                        target[subkey] = list(dict.fromkeys(target[subkey] + item))
+            elif isinstance(value, list):
+                target = merged.setdefault(key, [])
+                for item in value:
+                    try:
+                        duplicate = item in target
+                    except Exception:
+                        duplicate = False
+                    if not duplicate:
+                        target.append(item)
+            else:
+                merged.setdefault(key, value)
+    return merged
+
+
 def _default_fixture_path() -> Path | None:
     """Dev-tree fixture only. The installed wheel does not ship demo/fixtures."""
     env = os.environ.get("CASCADE_FIXTURE_PATH", "").strip()

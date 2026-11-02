@@ -1,0 +1,37 @@
+{
+  "urn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+  "actions": [
+    {
+      "op": "add_tags",
+      "tags": [
+        "cascade:retrain-suggested"
+      ]
+    },
+    {
+      "op": "save_document",
+      "title": "Cascade ML incident",
+      "body": "Feature `user_id` changed; retrain suggested for `urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)`."
+    }
+  ],
+  "aspects": [
+    {
+      "aspectName": "tagProperties",
+      "entityUrn": "urn:li:tag:cascade:retrain-suggested",
+      "name": "cascade:retrain-suggested"
+    },
+    {
+      "aspectName": "globalTags",
+      "entityUrn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+      "tags": [
+        "urn:li:tag:cascade:retrain-suggested"
+      ]
+    },
+    {
+      "aspectName": "institutionalMemory",
+      "entityUrn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+      "title": "Cascade ML incident",
+      "body": "Feature `user_id` changed; retrain suggested for `urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)`."
+    }
+  ],
+  "dry_run": true
+}

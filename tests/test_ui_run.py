@@ -35,16 +35,11 @@ class TestUiRun(unittest.TestCase):
         self.assertEqual(report["changes"][0]["type"], "FIELD_RENAMED")
         self.assertEqual(len(report["downstream"]), 3)
         self.assertTrue(report["ml_impact"])
-        self.assertTrue(report["remediations"])
-        self.assertIn("strategy", report["remediations"][0])
-        self.assertIn("rationale", report["remediations"][0])
+        self.assertEqual(report["remediations"], [])
 
         self.assertTrue(payload["graph"]["nodes"])
         self.assertTrue(payload["graph"]["edges"])
-        self.assertTrue(payload["files"])
-        f = payload["files"][0]
-        self.assertIn("user_id", f["before"])
-        self.assertIn("customer_id", f["after"])
+        self.assertEqual(payload["files"], [])
         self.assertIn("datahub_writeback.json", payload["apply"])
         self.assertIn("ml_writeback.json", payload["apply"])
 

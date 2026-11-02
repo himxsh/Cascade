@@ -1,0 +1,46 @@
+{
+  "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+  "actions": [
+    {
+      "op": "save_document",
+      "title": "Cascade change plan",
+      "body": "## Cascade impact report\n\n**Source:** `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)`\n**Severity:** `high`\n\n### Schema changes\n\n- `FIELD_RENAMED`: `user_id` \u2192 `customer_id` (detected_by=heuristic)\n\n### Blast radius\n\n- `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)` \u2014 owners: urn:li:corpuser:alice\n- `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)` \u2014 owners: urn:li:corpuser:alice\n- `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)` \u2014 owners: urn:li:corpuser:bob\n\n### Agent remediations\n\n- **adapter_view** (`urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)`)\n  - _no SQL model found for downstream node; recommend adapter view to alias user_id->customer_id while downstream migrates_\n- **rewrite** (`/Users/himeshjain/Desktop/Hackathons/Cascade/examples/models/fct_orders.sql`)\n  - _downstream SQL fct_orders.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change_\n- **adapter_view** (`urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)`)\n  - _no SQL model found for downstream node; recommend adapter view to alias user_id->customer_id while downstream migrates_\n\n### ML impact\n\n- `urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)` via `user_id` \u2192 `retrain-suggested`\n"
+    },
+    {
+      "op": "add_tags",
+      "tags": [
+        "cascade:breaking-pending"
+      ]
+    },
+    {
+      "op": "update_description",
+      "description": "[2026-08-10] Cascade: breaking schema change pending remediation."
+    }
+  ],
+  "aspects": [
+    {
+      "aspectName": "tagProperties",
+      "entityUrn": "urn:li:tag:cascade:breaking-pending",
+      "name": "cascade:breaking-pending"
+    },
+    {
+      "aspectName": "globalTags",
+      "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+      "tags": [
+        "urn:li:tag:cascade:breaking-pending"
+      ]
+    },
+    {
+      "aspectName": "editableDatasetProperties",
+      "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+      "description": "[2026-08-10] Cascade: breaking schema change pending remediation."
+    },
+    {
+      "aspectName": "institutionalMemory",
+      "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+      "title": "Cascade change plan",
+      "body": "## Cascade impact report\n\n**Source:** `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)`\n**Severity:** `high`\n\n### Schema changes\n\n- `FIELD_RENAMED`: `user_id` \u2192 `customer_id` (detected_by=heuristic)\n\n### Blast radius\n\n- `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)` \u2014 owners: urn:li:corpuser:alice\n- `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)` \u2014 owners: urn:li:corpuser:alice\n- `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)` \u2014 owners: urn:li:corpuser:bob\n\n### Agent remediations\n\n- **adapter_view** (`urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)`)\n  - _no SQL model found for downstream node; recommend adapter view to alias user_id->customer_id while downstream migrates_\n- **rewrite** (`/Users/himeshjain/Desktop/Hackathons/Cascade/examples/models/fct_orders.sql`)\n  - _downstream SQL fct_orders.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change_\n- **adapter_view** (`urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)`)\n  - _no SQL model found for downstream node; recommend adapter view to alias user_id->customer_id while downstream migrates_\n\n### ML impact\n\n- `urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)` via `user_id` \u2192 `retrain-suggested`\n"
+    }
+  ],
+  "dry_run": true
+}

@@ -10,6 +10,7 @@ from cascade.agent import choose_and_rewrite
 from cascade.apply import run_apply
 from cascade.config import changes_for_urn, load_config, resolve_urns
 from cascade.datahub_live import resolve_catalog
+from cascade.datahub_fixture import merge_catalogs
 from cascade.demo import DEFAULT_DIFF, DEFAULT_MODELS, DEFAULT_URN, run_demo
 from cascade.diff_parser import changed_paths, parse_changes_text
 from cascade.dotenv_load import load_dotenv
@@ -17,6 +18,14 @@ from cascade.impact import build_impact_report
 from cascade.models import ImpactReport
 from cascade.policy import evaluate_policy
 from cascade.setup_cmd import run_doctor, run_init, run_setup
+
+
+def _safe_output_path(out_dir: Path, path: str) -> Path:
+    src = Path(path)
+    dest = (out_dir / src).resolve()
+    if src.is_absolute() or not dest.is_relative_to(out_dir.resolve()):
+        raise ValueError("remediation path escapes output directory")
+    return dest
 
 
 def _resolve_impact_urns(args: argparse.Namespace, diff_text: str) -> list[str]:
@@ -52,6 +61,8 @@ def cmd_impact(args: argparse.Namespace) -> None:
     seen_down: set[str] = set()
     seen_rem: set[str] = set()
     seen_change: set[str] = set()
+    collected_catalogs = []
+    processed_urns = []
     severity = "low"
     primary_urn = urns[0]
 
@@ -62,6 +73,8 @@ def cmd_impact(args: argparse.Namespace) -> None:
         if not changes:
             changes = [{k: v for k, v in c.items() if k != "path"} for c in all_changes]
         catalog = resolve_catalog(args.source, urn, args.fixture)
+        collected_catalogs.append(catalog)
+        processed_urns.append(urn)
         report = build_impact_report(
             source_urn=urn,
             changes=changes,
@@ -81,22 +94,17 @@ def cmd_impact(args: argparse.Namespace) -> None:
                 merged_downstream.append(node)
         for m in report.ml_impact:
             merged_ml.append(m)
-
-        if getattr(args, "generate", False):
-            remediations = choose_and_rewrite(
-                changes=changes,
-                catalog=catalog,
-                models_dir=models_dir,
-                source_urn=urn,
-                rewrite_mode=getattr(args, "rewrite", None),
-                config=cfg,
-            )
-            for rem in remediations:
-                key = str(rem.get("path") or rem.get("urn"))
-                if key in seen_rem:
-                    continue
-                seen_rem.add(key)
-                merged_remediations.append(rem)
+    if getattr(args, "generate", False):
+        remediations = choose_and_rewrite(
+            changes=merged_changes,
+            catalog=merge_catalogs(collected_catalogs),
+            models_dir=models_dir,
+            source_urns=processed_urns,
+            rewrite_mode=getattr(args, "rewrite", None),
+            config=cfg,
+            diff_text=diff_text,
+        )
+        merged_remediations.extend(remediations)
 
     report = ImpactReport(
         source_urn=primary_urn,
@@ -108,6 +116,8 @@ def cmd_impact(args: argparse.Namespace) -> None:
     )
     payload = report.to_dict()
     payload["source_urns"] = urns
+    if getattr(args, "generate", False) and getattr(args, "diff", None):
+        payload["diff_text"] = diff_text
 
     if getattr(args, "generate", False):
         out_dir = getattr(args, "out", None)
@@ -117,7 +127,8 @@ def cmd_impact(args: argparse.Namespace) -> None:
             for rem in merged_remediations:
                 rewritten = rem.get("rewritten_sql")
                 if rewritten and rem.get("path"):
-                    dest = out_path / Path(rem["path"]).name
+                    dest = _safe_output_path(out_path, rem["path"])
+                    dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_text(rewritten)
             (out_path / "impact_report.json").write_text(json.dumps(payload, indent=2))
 
@@ -140,8 +151,10 @@ def cmd_generate(args: argparse.Namespace) -> None:
         catalog=catalog,
         models_dir=models_dir,
         source_urn=source_urn,
+        source_urns=report_data.get("source_urns"),
         rewrite_mode=getattr(args, "rewrite", None),
         config=cfg,
+        diff_text=report_data.get("diff_text"),
     )
     report_data["remediations"] = remediations
 
@@ -149,7 +162,8 @@ def cmd_generate(args: argparse.Namespace) -> None:
         rewritten = rem.get("rewritten_sql")
         if rewritten:
             src = Path(rem["path"])
-            dest = out_dir / src.name
+            dest = _safe_output_path(out_dir, str(src))
+            dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(rewritten)
 
     (out_dir / "impact_report.json").write_text(json.dumps(report_data, indent=2))
@@ -170,8 +184,10 @@ def cmd_apply(args: argparse.Namespace) -> None:
             catalog=catalog,
             models_dir=models_dir,
             source_urn=source_urn,
+            source_urns=report_data.get("source_urns"),
             rewrite_mode=getattr(args, "rewrite", None),
             config=cfg,
+            diff_text=report_data.get("diff_text"),
         )
 
     summary = run_apply(
@@ -270,8 +286,8 @@ def main() -> None:
     impact_p.add_argument("--out", help="Output directory for rewritten SQL files")
     impact_p.add_argument(
         "--rewrite",
-        choices=["deterministic", "llm"],
-        help="Rewrite engine (default: CASCADE_MODE or deterministic)",
+        choices=["off", "llm", "deterministic"],
+        help="Rewrite: off = report only, llm = fix files (default: CASCADE_MODE or off; deterministic = off)",
     )
     impact_p.set_defaults(func=cmd_impact)
 
@@ -289,8 +305,8 @@ def main() -> None:
     )
     gen_p.add_argument(
         "--rewrite",
-        choices=["deterministic", "llm"],
-        help="Rewrite engine (default: CASCADE_MODE or deterministic)",
+        choices=["off", "llm", "deterministic"],
+        help="Rewrite: off = report only, llm = fix files (default: CASCADE_MODE or off; deterministic = off)",
     )
     gen_p.set_defaults(func=cmd_generate)
 
@@ -316,8 +332,8 @@ def main() -> None:
     )
     apply_p.add_argument(
         "--rewrite",
-        choices=["deterministic", "llm"],
-        help="Rewrite engine when --generate (default: CASCADE_MODE or deterministic)",
+        choices=["off", "llm", "deterministic"],
+        help="Rewrite when --generate: off = report only, llm = fix files (default: CASCADE_MODE or off; deterministic = off)",
     )
     apply_p.add_argument(
         "--mark-migrated",

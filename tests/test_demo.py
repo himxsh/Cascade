@@ -31,15 +31,12 @@ class TestDemo(unittest.TestCase):
             with mock.patch.dict(os.environ, env, clear=True):
                 result = run_demo(out_dir=tmp)
             self.assertEqual(result["severity"], "high")
-            self.assertGreater(result["remediation_count"], 0)
+            self.assertEqual(result["remediation_count"], 0)
             self.assertTrue(Path(tmp, "generate", "impact_report.json").exists())
-            self.assertTrue(Path(tmp, "generate", "fct_orders.sql").exists())
+            self.assertFalse(Path(tmp, "generate", "fct_orders.sql").exists())
             self.assertTrue(Path(tmp, "apply", "pr_comment.md").exists())
             self.assertTrue(Path(tmp, "apply", "downstream_pr.diff").exists())
             self.assertTrue(Path(tmp, "demo_summary.json").exists())
-            sql = Path(tmp, "generate", "fct_orders.sql").read_text()
-            self.assertIn("customer_id", sql)
-            self.assertNotIn("user_id", sql)
 
 
 if __name__ == "__main__":

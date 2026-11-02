@@ -1,0 +1,175 @@
+{
+  "source_urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+  "changes": [
+    {
+      "type": "FIELD_RENAMED",
+      "from": "user_id",
+      "to": "customer_id",
+      "detected_by": "heuristic"
+    }
+  ],
+  "downstream": [
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:alice"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders_star,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:alice"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_payments,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:alice"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.orphan_legacy_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:alice"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.rpt_literal_traps,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:eve"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.int_orders_enriched,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:bob"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.int_union_identities,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:eve"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:bob"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.mart_revenue,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:bob",
+        "urn:li:corpuser:carol"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:ml-platform"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.bq_fct_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:bob"
+      ]
+    }
+  ],
+  "ml_impact": [
+    {
+      "model_urn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+      "via_feature": "user_id",
+      "action": "retrain-suggested"
+    }
+  ],
+  "severity": "high",
+  "remediations": [
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)",
+      "path": "examples/mean/stg_orders.sql",
+      "strategy": "rewrite",
+      "rationale": "downstream SQL stg_orders.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change",
+      "rewritten_sql": "-- Analysts: do not drop customer_id until marts migrate.\n-- event_name = 'customer_id' is a string, not a column.\n\nWITH src AS (\n    SELECT\n        o.order_id,\n        o.customer_id,\n        o.\"USER_ID\" AS user_id_quoted,\n        o.amount,\n        o.payload:customer_id::string AS payload_user,\n        o.user_id_hash\n    FROM analytics.raw_orders AS o\n)\n\nSELECT * FROM src\nWHERE amount > 0\n  AND 'customer_id' IS NOT NULL\n",
+      "agent": "deterministic"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_payments,PROD)",
+      "path": "examples/mean/stg_payments.sql",
+      "strategy": "rewrite",
+      "rationale": "downstream SQL stg_payments.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change",
+      "rewritten_sql": "SELECT\n    payment_id,\n    order_id,\n    customer_id,\n    cents\nFROM analytics.raw_payments\n",
+      "agent": "deterministic"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.orphan_legacy_orders,PROD)",
+      "strategy": "adapter_view",
+      "rationale": "no SQL model found for downstream node; recommend adapter view to alias user_id->customer_id while downstream migrates",
+      "agent": "deterministic"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.rpt_literal_traps,PROD)",
+      "path": "examples/mean/rpt_literal_traps.sql",
+      "strategy": "rewrite",
+      "rationale": "downstream SQL rpt_literal_traps.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change",
+      "rewritten_sql": "-- Column lineage claims this consumes raw_orders.customer_id.\n-- The SQL never selects that column; it only mentions the token in prose.\nSELECT\n    'customer_id' AS note\n-- backlog: migrate customer_id dashboards\n",
+      "agent": "deterministic"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.int_orders_enriched,PROD)",
+      "path": "examples/mean/int_orders_enriched.sql",
+      "strategy": "rewrite",
+      "rationale": "downstream SQL int_orders_enriched.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change",
+      "rewritten_sql": "-- Mean join: orders.customer_id (buyer) = customers.customer_id (login). After a correct\n-- orders rename this ON should become o.customer_id = c.customer_id, and c.customer_id\n-- (login) must stay.\nWITH base AS (\n    SELECT\n        o.order_id,\n        o.customer_id,\n        c.email\n    FROM analytics.stg_orders AS o\n    LEFT JOIN analytics.stg_customers AS c\n        ON o.customer_id = c.customer_id\n)\nSELECT * FROM base\n",
+      "agent": "deterministic"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.int_union_identities,PROD)",
+      "strategy": "adapter_view",
+      "rationale": "rewrite of user_id->customer_id in int_union_identities.sql failed schema gate; falling back to adapter view",
+      "agent": "deterministic"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)",
+      "path": "examples/mean/fct_orders.sql",
+      "strategy": "rewrite",
+      "rationale": "downstream SQL fct_orders.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change",
+      "rewritten_sql": "SELECT\n    order_id,\n    customer_id AS customer_id,\n    amount\nFROM analytics.int_orders_enriched\n",
+      "agent": "deterministic"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.mart_revenue,PROD)",
+      "path": "examples/mean/mart_revenue.sql",
+      "strategy": "rewrite",
+      "rationale": "downstream SQL mart_revenue.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change",
+      "rewritten_sql": "SELECT\n    o.order_id,\n    o.customer_id,\n    c.customer_id AS login_user_id,\n    c.customer_id,\n    o.amount\nFROM analytics.fct_orders AS o\nINNER JOIN analytics.dim_customers AS c\n    ON o.customer_id = c.customer_id\n",
+      "agent": "deterministic"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)",
+      "path": "examples/mean/features_orders.sql",
+      "strategy": "rewrite",
+      "rationale": "downstream SQL features_orders.sql references user_id in SELECT/JOIN; rewriting to customer_id to match upstream schema change",
+      "rewritten_sql": "SELECT\n    customer_id,\n    COUNT(*) AS order_count,\n    SUM(amount) AS total_amount\nFROM analytics.fct_orders\nGROUP BY 1\n",
+      "agent": "deterministic"
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.bq_fct_orders,PROD)",
+      "strategy": "adapter_view",
+      "rationale": "rewrite of user_id->customer_id in bq_fct_orders.sql failed schema gate; falling back to adapter view",
+      "agent": "deterministic"
+    }
+  ]
+}

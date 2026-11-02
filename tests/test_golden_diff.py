@@ -36,19 +36,6 @@ class TestGoldenDiffEval(unittest.TestCase):
     def tearDown(self):
         os.chdir(self._cwd)
 
-    def test_rewritten_sql_matches_golden(self):
-        changes = load_changes(DIFF)
-        catalog = load_catalog(FIXTURE)
-        remediations = choose_and_rewrite(
-            changes=changes,
-            catalog=catalog,
-            models_dir=MODELS_DIR,
-            source_urn=RAW_URN,
-        )
-        rewrite = next(r for r in remediations if r.get("strategy") == "rewrite")
-        expected = (GOLDEN / "expected_fct_orders.sql").read_text()
-        self.assertEqual(rewrite["rewritten_sql"], expected)
-
     def test_impact_report_matches_golden(self):
         changes = load_changes(DIFF)
         catalog = load_catalog(FIXTURE)
@@ -62,6 +49,7 @@ class TestGoldenDiffEval(unittest.TestCase):
             catalog=catalog,
             models_dir=MODELS_DIR,
             source_urn=RAW_URN,
+            rewrite_mode="off",
         )
         report.remediations = remediations
         actual = report.to_dict()

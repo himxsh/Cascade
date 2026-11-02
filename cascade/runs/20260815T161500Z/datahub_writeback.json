@@ -1,0 +1,46 @@
+{
+  "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+  "actions": [
+    {
+      "op": "save_document",
+      "title": "Cascade change plan",
+      "body": "## Cascade impact report\n\n**What changed:** user_id to customer_id on `raw_orders`\n**Downstream:** 3 models (high)\n**Agent:** deterministic\n\n```mermaid\nflowchart LR\n  s_raw_orders[\"raw_orders: user_id to customer_id\"]\n  d0_stg_orders[\"stg_orders\"]\n  s_raw_orders --> d0_stg_orders\n  d1_fct_orders[\"fct_orders\"]\n  s_raw_orders --> d1_fct_orders\n  d2_features_orders[\"features_orders\"]\n  s_raw_orders --> d2_features_orders\n```\n\nCascade opened (or will open) a remediation PR with the SQL fix.\n\n**ML:** retrain suggested for `churn_predictor`\n\n**Source:** `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)`\n"
+    },
+    {
+      "op": "add_tags",
+      "tags": [
+        "cascade:breaking-pending"
+      ]
+    },
+    {
+      "op": "update_description",
+      "description": "[2026-08-15] Cascade: breaking schema change pending remediation."
+    }
+  ],
+  "aspects": [
+    {
+      "aspectName": "tagProperties",
+      "entityUrn": "urn:li:tag:cascade:breaking-pending",
+      "name": "cascade:breaking-pending"
+    },
+    {
+      "aspectName": "globalTags",
+      "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+      "tags": [
+        "urn:li:tag:cascade:breaking-pending"
+      ]
+    },
+    {
+      "aspectName": "editableDatasetProperties",
+      "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+      "description": "[2026-08-15] Cascade: breaking schema change pending remediation."
+    },
+    {
+      "aspectName": "institutionalMemory",
+      "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+      "title": "Cascade change plan",
+      "body": "## Cascade impact report\n\n**What changed:** user_id to customer_id on `raw_orders`\n**Downstream:** 3 models (high)\n**Agent:** deterministic\n\n```mermaid\nflowchart LR\n  s_raw_orders[\"raw_orders: user_id to customer_id\"]\n  d0_stg_orders[\"stg_orders\"]\n  s_raw_orders --> d0_stg_orders\n  d1_fct_orders[\"fct_orders\"]\n  s_raw_orders --> d1_fct_orders\n  d2_features_orders[\"features_orders\"]\n  s_raw_orders --> d2_features_orders\n```\n\nCascade opened (or will open) a remediation PR with the SQL fix.\n\n**ML:** retrain suggested for `churn_predictor`\n\n**Source:** `urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)`\n"
+    }
+  ],
+  "dry_run": true
+}

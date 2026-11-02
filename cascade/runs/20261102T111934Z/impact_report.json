@@ -1,0 +1,43 @@
+{
+  "source_urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.raw_orders,PROD)",
+  "changes": [
+    {
+      "type": "FIELD_RENAMED",
+      "from": "user_id",
+      "to": "customer_id",
+      "detected_by": "heuristic"
+    }
+  ],
+  "downstream": [
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.stg_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:alice"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.fct_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:alice"
+      ]
+    },
+    {
+      "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.features_orders,PROD)",
+      "type": "dataset",
+      "owners": [
+        "urn:li:corpuser:bob"
+      ]
+    }
+  ],
+  "ml_impact": [
+    {
+      "model_urn": "urn:li:mlModel:(urn:li:dataPlatform:snowflake,churn_predictor,PROD)",
+      "via_feature": "user_id",
+      "action": "retrain-suggested"
+    }
+  ],
+  "severity": "high",
+  "remediations": []
+}

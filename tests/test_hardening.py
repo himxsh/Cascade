@@ -56,6 +56,8 @@ class TestAudit(unittest.TestCase):
                 root=tmp,
             )
             self.assertTrue((run_dir / "impact_report.json").is_file())
+            self.assertEqual(run_dir, Path(tmp).resolve() / ".cascade" / "runs" / "test-run")
+            self.assertFalse((Path(tmp) / "cascade").exists())
             self.assertTrue((run_dir / "pr_comment.md").is_file())
             self.assertTrue((run_dir / "rewritten" / "a.sql").is_file())
 
@@ -76,7 +78,7 @@ class TestAudit(unittest.TestCase):
                 apply_out=tmp,
                 root=tmp,
             )
-            runs = (Path(tmp) / "cascade" / "runs").resolve()
+            runs = (Path(tmp) / ".cascade" / "runs").resolve()
             self.assertEqual(run_dir.parent, runs)
             self.assertFalse((Path(tmp).resolve().parent / "pwn").exists())
 
@@ -163,7 +165,7 @@ class TestApplyMode(unittest.TestCase):
 
     def test_dry_run_mode_forces_dry_even_with_open_flag(self):
         report = json.loads(GOLDEN_REPORT.read_text())
-        report["remediations"][1]["rewritten_sql"] = GOLDEN_SQL.read_text()
+        report["remediations"] = [{"urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,shop.public.fct_orders,PROD)", "path": "examples/models/fct_orders.sql", "strategy": "rewrite", "rationale": "rename user_id", "rewritten_sql": GOLDEN_SQL.read_text(), "agent": "llm"}]
         with tempfile.TemporaryDirectory() as tmp:
             env = {
                 **{k: v for k, v in os.environ.items() if k != "CASCADE_WRITEBACK"},
@@ -185,7 +187,7 @@ class TestApplyMode(unittest.TestCase):
             self.assertTrue(summary["comment"]["dry_run"])
             self.assertFalse(summary["policy"]["ok"])  # OPEN set, high, dry-run did not open
             self.assertTrue(Path(tmp, "apply_summary.json").is_file())
-            self.assertTrue(Path(tmp, "cascade", "runs", "mode-test", "apply_summary.json").is_file())
+            self.assertTrue(Path(tmp, ".cascade", "runs", "mode-test", "apply_summary.json").is_file())
 
 
 if __name__ == "__main__":

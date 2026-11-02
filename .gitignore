@@ -11,7 +11,7 @@ build/
 *.egg-info/
 .ruff_cache/
 uv.lock
-cascade/runs/
+.cascade/runs/
 artifacts/
 .vercel
 /public/

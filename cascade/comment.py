@@ -53,12 +53,12 @@ def _change_phrase(changes: list[dict[str, Any]]) -> str:
 
 
 def _agent_label(remediations: list[dict[str, Any]]) -> str:
-    agents = {str(r.get("agent") or "deterministic") for r in remediations or []}
+    agents = {str(r.get("agent") or "llm") for r in remediations or []}
     if agents == {"llm"}:
         return "llm"
     if "llm" in agents:
-        return "llm (some nodes fell back to deterministic)"
-    return "deterministic"
+        return "llm"
+    return "none (report only)"
 
 
 def blast_mermaid(report: dict[str, Any]) -> str | None:
@@ -97,7 +97,7 @@ def fix_mermaid(report: dict[str, Any]) -> str | None:
     for i, rem in enumerate(remediations[:_MAX_GRAPH_NODES]):
         label = _short_name(str(rem.get("path") or rem.get("urn") or f"node{i}"))
         strategy = rem.get("strategy") or "fix"
-        agent = rem.get("agent") or "deterministic"
+        agent = rem.get("agent") or "llm"
         rid = f"r{i}"
         lines.append(f'  {rid}["{label}: {strategy} ({agent})"]')
         lines.append(f"  blast --> {rid}")
@@ -224,7 +224,7 @@ def build_remediation_pr_body(report: dict[str, Any]) -> str:
             extra = f" — {rationale}" if rationale else ""
             lines.append(
                 f"- `{rem['path']}` — {rem.get('strategy', 'rewrite')} "
-                f"({rem.get('agent') or 'deterministic'}){extra}"
+                f"({rem.get('agent') or 'llm'}){extra}"
             )
         lines.append("")
     others = [r for r in remediations if not (r.get("path") and r.get("rewritten_sql"))]

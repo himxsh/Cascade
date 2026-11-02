@@ -1,0 +1,99 @@
+--- a/examples/mean/fct_orders.sql
++++ b/examples/mean/fct_orders.sql
+@@ -1,5 +1,5 @@
+ SELECT
+     order_id,
+-    user_id AS customer_id,
++    customer_id AS customer_id,
+     amount
+ FROM analytics.int_orders_enriched
+--- a/examples/mean/features_orders.sql
++++ b/examples/mean/features_orders.sql
+@@ -1,5 +1,5 @@
+ SELECT
+-    user_id,
++    customer_id,
+     COUNT(*) AS order_count,
+     SUM(amount) AS total_amount
+ FROM analytics.fct_orders
+--- a/examples/mean/int_orders_enriched.sql
++++ b/examples/mean/int_orders_enriched.sql
+@@ -1,13 +1,13 @@
+--- Mean join: orders.user_id (buyer) = customers.user_id (login). After a correct
+--- orders rename this ON should become o.customer_id = c.customer_id, and c.user_id
++-- Mean join: orders.customer_id (buyer) = customers.customer_id (login). After a correct
++-- orders rename this ON should become o.customer_id = c.customer_id, and c.customer_id
+ -- (login) must stay.
+ WITH base AS (
+     SELECT
+         o.order_id,
+-        o.user_id,
++        o.customer_id,
+         c.email
+     FROM analytics.stg_orders AS o
+     LEFT JOIN analytics.stg_customers AS c
+-        ON o.user_id = c.user_id
++        ON o.customer_id = c.customer_id
+ )
+ SELECT * FROM base
+--- a/examples/mean/mart_revenue.sql
++++ b/examples/mean/mart_revenue.sql
+@@ -1,9 +1,9 @@
+ SELECT
+     o.order_id,
+-    o.user_id,
+-    c.user_id AS login_user_id,
++    o.customer_id,
++    c.customer_id AS login_user_id,
+     c.customer_id,
+     o.amount
+ FROM analytics.fct_orders AS o
+ INNER JOIN analytics.dim_customers AS c
+-    ON o.user_id = c.user_id
++    ON o.customer_id = c.customer_id
+--- a/examples/mean/rpt_literal_traps.sql
++++ b/examples/mean/rpt_literal_traps.sql
+@@ -1,5 +1,5 @@
+--- Column lineage claims this consumes raw_orders.user_id.
++-- Column lineage claims this consumes raw_orders.customer_id.
+ -- The SQL never selects that column; it only mentions the token in prose.
+ SELECT
+-    'user_id' AS note
+--- backlog: migrate user_id dashboards
++    'customer_id' AS note
++-- backlog: migrate customer_id dashboards
+--- a/examples/mean/stg_orders.sql
++++ b/examples/mean/stg_orders.sql
+@@ -1,17 +1,17 @@
+--- Analysts: do not drop user_id until marts migrate.
+--- event_name = 'user_id' is a string, not a column.
++-- Analysts: do not drop customer_id until marts migrate.
++-- event_name = 'customer_id' is a string, not a column.
+ 
+ WITH src AS (
+     SELECT
+         o.order_id,
+-        o.user_id,
++        o.customer_id,
+         o."USER_ID" AS user_id_quoted,
+         o.amount,
+-        o.payload:user_id::string AS payload_user,
++        o.payload:customer_id::string AS payload_user,
+         o.user_id_hash
+     FROM analytics.raw_orders AS o
+ )
+ 
+ SELECT * FROM src
+ WHERE amount > 0
+-  AND 'user_id' IS NOT NULL
++  AND 'customer_id' IS NOT NULL
+--- a/examples/mean/stg_payments.sql
++++ b/examples/mean/stg_payments.sql
+@@ -1,6 +1,6 @@
+ SELECT
+     payment_id,
+     order_id,
+-    user_id,
++    customer_id,
+     cents
+ FROM analytics.raw_payments
