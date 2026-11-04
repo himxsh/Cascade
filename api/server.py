@@ -26,7 +26,9 @@ from api.auth import (
 from api.db import get_conn
 from api.github_app import (
     GitHubAppError,
+    create_installation_token,
     fetch_installation,
+    install_workflow,
     make_setup_state,
     setup_state_matches,
     user_is_org_admin,
@@ -587,6 +589,7 @@ async def api_github_webhook(request: Request) -> JSONResponse:
     header_delivery = (request.headers.get("x-github-delivery") or "").strip()
     delivery_id = header_delivery or f"local-{uuid.uuid4()}"
 
+    workflow_outcomes: list[dict[str, str]] = []
     with get_conn() as conn:
         if header_delivery:
             inserted = record_delivery(
@@ -635,7 +638,28 @@ async def api_github_webhook(request: Request) -> JSONResponse:
                 reason=decision.get("reason"),
             )
 
-    # Phase 7: mint installation token and comment. Not in this iteration.
+    if app_configured() and event in {"installation", "installation_repositories"}:
+        action = payload.get("action")
+        if event == "installation" and action == "created":
+            repos = payload.get("repositories") or []
+        elif event == "installation_repositories" and action == "added":
+            repos = payload.get("repositories_added") or []
+        else:
+            repos = []
+        installation_id = (payload.get("installation") or {}).get("id")
+        token = None
+        for repo_item in repos:
+            full_name = str(repo_item.get("full_name") or "")
+            if not full_name:
+                continue
+            try:
+                if token is None:
+                    token = create_installation_token(int(installation_id))
+                outcome = install_workflow(token, full_name)
+                workflow_outcomes.append({"repo": full_name, **outcome})
+            except Exception:
+                _log.exception("GitHub workflow setup failed for %s", full_name)
+                workflow_outcomes.append({"repo": full_name, "status": "error"})
     return JSONResponse(
         {
             "ok": True,
@@ -647,6 +671,7 @@ async def api_github_webhook(request: Request) -> JSONResponse:
             "repo": decision["repo"],
             "queued": decision["queued"],
             "comment": False,
+            "workflow_outcomes": workflow_outcomes,
         },
         status_code=200,
     )

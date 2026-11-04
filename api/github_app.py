@@ -1,4 +1,4 @@
-"""GitHub App JWT + installation lookup. Does not mint installation tokens (Phase 7)."""
+"""GitHub App authentication and setup pull requests for consumer workflows."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
+
+from cascade.workflow import render_workflow
 
 from api.auth import AuthError, sign_payload, unsign_payload
 from api.settings import env_str
@@ -127,6 +129,61 @@ def fetch_installation(installation_id: int) -> dict[str, Any]:
     }
 
 
+def create_installation_token(installation_id: int) -> str:
+    data = _http_json(
+        f"{GITHUB_API}/app/installations/{int(installation_id)}/access_tokens",
+        token=create_app_jwt(),
+        method="POST",
+        body={},
+    )
+    token = str(data.get("token") or "")
+    if not token:
+        raise GitHubAppError("GitHub response missing installation token")
+    return token
+
+
+def install_workflow(token: str, full_name: str) -> dict[str, Any]:
+    owner, repo = full_name.split("/", 1)
+    root = f"{GITHUB_API}/repos/{quote(owner, safe='')}/{quote(repo, safe='')}"
+    repository = _http_json(root, token=token)
+    base = str(repository.get("default_branch") or "main")
+    path = ".github/workflows/cascade.yml"
+    rendered = render_workflow()
+    encoded = base64.b64encode(rendered.encode()).decode()
+    try:
+        _http_json(f"{root}/contents/{path}?ref={quote(base, safe='')}", token=token)
+        return {"status": "exists"}
+    except GitHubAppError as e:
+        if e.github_status != 404:
+            raise
+    try:
+        _http_json(f"{root}/contents/{path}", token=token, method="PUT", body={"message": "Add Cascade workflow", "content": encoded, "branch": base})
+        return {"status": "committed"}
+    except GitHubAppError as e:
+        if e.github_status not in {403, 409, 422}:
+            raise
+    try:
+        head = _http_json(f"{root}/git/ref/heads/{quote(base, safe='')}", token=token)
+        sha = str((head.get("object") or {}).get("sha") or "")
+        if not sha:
+            raise GitHubAppError("GitHub response missing default branch sha")
+        _http_json(f"{root}/git/ref/heads/cascade/setup", token=token)
+        return {"status": "exists"}
+    except GitHubAppError as e:
+        if e.github_status != 404:
+            raise
+    prs = _http_json(f"{root}/pulls?state=open&head={quote(owner + ':cascade/setup', safe=':')}", token=token)
+    if prs:
+        return {"status": "exists"}
+    _http_json(f"{root}/git/refs", token=token, method="POST", body={"ref": "refs/heads/cascade/setup", "sha": sha})
+    _http_json(f"{root}/contents/{path}", token=token, method="PUT", body={"message": "Add Cascade workflow", "content": encoded, "branch": "cascade/setup"})
+    body = (f"Add the Actions secret [LLM_API_KEY](https://github.com/{full_name}/settings/secrets/actions/new?name=LLM_API_KEY), "
+            "and add DATAHUB_GMS_URL as an Actions secret. Set repo variables CASCADE_MODE and LLM_MODEL "
+            f"in [Actions variables](https://github.com/{full_name}/settings/variables/actions). Your LLM key stays in your GitHub secrets.")
+    _http_json(f"{root}/pulls", token=token, method="POST", body={"title": "Add Cascade GitHub Actions workflow", "head": "cascade/setup", "base": base, "body": body})
+    return {"status": "pr_opened"}
+
+
 def user_may_claim_installation(
     user: dict[str, Any],
     remote: dict[str, Any],
@@ -171,14 +228,17 @@ def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode().rstrip("=")
 
 
-def _http_json(url: str, *, token: str) -> dict[str, Any]:
+def _http_json(url: str, *, token: str, method: str = "GET", body: dict[str, Any] | None = None) -> Any:
     headers = {
         "User-Agent": USER_AGENT,
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    req = urllib.request.Request(url, headers=headers, method="GET")
+    data = json.dumps(body).encode() if body is not None else None
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, headers=headers, data=data, method=method)
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             raw = resp.read().decode()
@@ -193,6 +253,6 @@ def _http_json(url: str, *, token: str) -> dict[str, Any]:
         ) from e
     except urllib.error.URLError as e:
         raise GitHubAppError(f"GitHub unreachable: {e.reason}") from e
-    if not isinstance(payload, dict):
-        raise GitHubAppError("GitHub installation payload must be an object")
+    if not isinstance(payload, (dict, list)):
+        raise GitHubAppError("GitHub API payload must be an object or array")
     return payload
