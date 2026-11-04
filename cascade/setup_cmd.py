@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import getpass
 import json
 import os
 import shutil
@@ -14,6 +15,7 @@ from cascade import __version__
 from cascade.config import CascadeConfig, _urn_stem, load_config, resolve_rewrite_mode
 from cascade.datahub_live import health_check, search_dataset_hits
 from cascade.dotenv_load import load_dotenv
+from cascade.workflow import render_workflow
 
 _TEMPLATES = Path(__file__).resolve().parent / "templates"
 
@@ -59,7 +61,7 @@ def _copy_template(name: str, dest: Path, force: bool) -> str:
     if dest.exists() and not force:
         return f"skip {dest} (exists)"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(src.read_text())
+    dest.write_text(render_workflow() if name == "github-cascade.yml" else src.read_text())
     return f"wrote {dest}"
 
 
@@ -152,13 +154,50 @@ def run_doctor(root: Path | None = None, *, require_gms: bool = True) -> tuple[l
         else:
             lines.append("fail CASCADE_MODE=llm but no LLM_API_KEY")
             rc = 1
+
         if model:
             lines.append(f"ok   LLM_MODEL {model}")
         else:
             lines.append("fail CASCADE_MODE=llm requires LLM_MODEL")
             rc = 1
 
+    _doctor_github(root, lines)
+
     return lines, rc
+
+
+def _doctor_github(root: Path, lines: list[str]) -> None:
+    if not shutil.which("gh"):
+        return
+    if _resolve_git_root(root) is None:
+        return
+    try:
+        auth = subprocess.run(["gh", "auth", "status"], cwd=root, capture_output=True, text=True, timeout=10)
+        if auth.returncode:
+            return
+        secrets = subprocess.run(["gh", "secret", "list"], cwd=root, capture_output=True, text=True, timeout=10)
+        variables = subprocess.run(["gh", "variable", "list"], cwd=root, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    if secrets.returncode or variables.returncode:
+        return
+    secret_names = {line.split()[0] for line in secrets.stdout.splitlines() if line.split()}
+    variable_names = {line.split()[0] for line in variables.stdout.splitlines() if line.split()}
+    for label, names in (
+        ("LLM_API_KEY", ("LLM_API_KEY", "OPENAI_API_KEY")),
+        ("DATAHUB_GMS_URL", ("DATAHUB_GMS_URL",)),
+    ):
+        if any(name in secret_names for name in names):
+            lines.append(f"ok   GitHub secret {label}")
+        else:
+            lines.append(f"warn GitHub secret {label} missing — gh secret set {label}")
+    for name in ("CASCADE_MODE", "LLM_MODEL"):
+        if name in variable_names:
+            lines.append(f"ok   GitHub variable {name}")
+        else:
+            lines.append(f"warn GitHub variable {name} missing — gh variable set {name}")
+    if not (root / ".github" / "workflows" / "cascade.yml").is_file():
+        lines.append("warn .github/workflows/cascade.yml missing")
 
 
 def _is_placeholder_urn(urn: str) -> bool:
@@ -320,18 +359,29 @@ def _live_lookup(gms_url: str, token: str | None) -> Callable[[str], tuple[list[
     return lookup
 
 
-def _gh_secret_help(token: str | None = None) -> list[str]:
+def _gh_secret_help(token: str | None = None, *, llm: bool = False) -> list[str]:
     block = "printf '%s' \"$DATAHUB_GMS_URL\" | gh secret set DATAHUB_GMS_URL"
     if token:
         block += "\nprintf '%s' \"$DATAHUB_TOKEN\" | gh secret set DATAHUB_TOKEN"
-    return [
+    if llm:
+        block += "\nprintf '%s' \"$LLM_API_KEY\" | gh secret set LLM_API_KEY"
+    lines = [
         "Set Actions secrets (values stay in your shell):",
         block,
     ]
+    if llm:
+        lines.append("gh variable set CASCADE_MODE --body llm\ngh variable set LLM_MODEL --body <model>")
+    return lines
 
 
-def _try_set_gh_secrets(root: Path, url: str, token: str | None) -> list[str]:
-    help_lines = _gh_secret_help(token)
+def _try_set_gh_secrets(
+    root: Path,
+    url: str,
+    token: str | None,
+    llm_key: str | None = None,
+    variables: dict[str, str] | None = None,
+) -> list[str]:
+    help_lines = _gh_secret_help(token, llm=llm_key is not None or bool(variables))
     if not shutil.which("gh"):
         return help_lines
     try:
@@ -351,6 +401,8 @@ def _try_set_gh_secrets(root: Path, url: str, token: str | None) -> list[str]:
     pairs = [("DATAHUB_GMS_URL", url)]
     if token:
         pairs.append(("DATAHUB_TOKEN", token))
+    if llm_key:
+        pairs.append(("LLM_API_KEY", llm_key))
     for name, value in pairs:
         try:
             proc = subprocess.run(
@@ -366,6 +418,21 @@ def _try_set_gh_secrets(root: Path, url: str, token: str | None) -> list[str]:
         if proc.returncode != 0:
             return notes + help_lines
         notes.append(f"set GitHub secret {name}")
+    for name, value in (variables or {}).items():
+        try:
+            proc = subprocess.run(
+                ["gh", "variable", "set", name],
+                cwd=root,
+                input=value,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return notes + help_lines
+        if proc.returncode:
+            return notes + help_lines
+        notes.append(f"set GitHub variable {name}")
     return notes
 
 
@@ -380,6 +447,7 @@ def run_setup(
     start = (root or Path.cwd()).resolve()
     lines: list[str] = []
     ask = prompt or input
+    secret_ask = prompt or getpass.getpass
 
     git_root = _resolve_git_root(start)
     if git_root is None:
@@ -448,7 +516,25 @@ def run_setup(
             replace_placeholders=bool(mappings),
         )
         if not skip_secrets:
-            lines.extend(_try_set_gh_secrets(root, url, token))
+            llm_key = os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            if not llm_key and _can_prompt(non_interactive, prompt):
+                llm_key = secret_ask("LLM API key (leave empty to skip): ").strip() or None
+            model = os.environ.get("LLM_MODEL", "").strip()
+            if not model and _can_prompt(non_interactive, prompt):
+                model = ask("LLM model (for example gpt-4o): ").strip()
+            variables = {}
+            if llm_key:
+                variables["CASCADE_MODE"] = "llm"
+            if model and llm_key:
+                variables["LLM_MODEL"] = model
+            for name in ("CASCADE_LLM_PROVIDER", "LLM_BASE_URL"):
+                if os.environ.get(name) and llm_key:
+                    variables[name] = os.environ[name]
+            if not llm_key:
+                lines.append("hint add LLM_API_KEY, then run: gh variable set CASCADE_MODE --body llm")
+                if not model:
+                    lines.append("hint set LLM_MODEL with gh variable set LLM_MODEL --body <model>")
+            lines.extend(_try_set_gh_secrets(root, url, token, llm_key, variables))
 
     doc_lines, doc_rc = run_doctor(root, require_gms=not demo)
     lines.extend(doc_lines)

@@ -121,6 +121,9 @@ export function Dashboard({ me }: { me: Me }) {
   const enabledCount = (repos ?? []).filter((r) => r.enabled).length
   const installUrl = me.app_install_url || config?.app_install_url
   const installed = (me.installations ?? []).some((i) => i.installation_id > 0)
+  const finishSetup = tab === 'repos' && new URLSearchParams(window.location.search).get('installed') === '1'
+  const selectedRepo = repos?.find((repo) => repo.enabled) ?? repos?.[0]
+  const repoSettings = selectedRepo ? `https://github.com/${selectedRepo.full_name}/settings` : 'https://github.com'
 
   return (
     <div className="mx-auto max-w-[1120px] px-5 py-12 sm:px-6">
@@ -196,6 +199,18 @@ export function Dashboard({ me }: { me: Me }) {
 
       {tab === 'repos' ? (
         <section className="mt-10">
+          {finishSetup ? (
+            <div className="slab mb-5 p-5 text-sm">
+              <h2 className="font-semibold text-frost">Finish setup</h2>
+              <ol className="mt-3 list-decimal space-y-2 pl-5 text-mute">
+                <li>App installed ✓</li>
+                <li><a className="text-frost underline" href={`${repoSettings}/secrets/actions/new?name=LLM_API_KEY`}>Add Actions secret LLM_API_KEY</a> — it stays in your GitHub secrets.</li>
+                <li><a className="text-frost underline" href={`${repoSettings}/secrets/actions/new?name=DATAHUB_GMS_URL`}>Add Actions secret DATAHUB_GMS_URL</a> using an HTTPS URL; runners cannot reach localhost.</li>
+                <li><a className="text-frost underline" href={`${repoSettings}/variables/actions`}>Set Actions variables</a>: CASCADE_MODE=llm and LLM_MODEL.</li>
+                <li>Cascade added .github/workflows/cascade.yml, or opened a cascade/setup PR if the branch is protected.</li>
+              </ol>
+            </div>
+          ) : null}
           {mock ? (
             <p className="mb-4 text-sm text-mute">
               Showing a mock list so you can persist enable/disable without a live

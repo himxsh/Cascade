@@ -1,0 +1,140 @@
+name: Cascade reusable workflow
+
+on:
+  workflow_call:
+    inputs:
+      cascade-version:
+        description: Cascade package version
+        required: true
+        type: string
+
+jobs:
+  pr-impact:
+    if: >
+      (github.event_name == 'pull_request' &&
+       !startsWith(github.head_ref, 'cascade/remediation/')) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/cascade stack') &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR' ||
+        github.event.comment.user.login == github.event.issue.user.login))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.issue.number) }}
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+
+      - name: Require live DataHub secret
+        env:
+          DATAHUB_GMS_URL: ${{ secrets.DATAHUB_GMS_URL }}
+        run: |
+          if [ -z "${DATAHUB_GMS_URL:-}" ]; then
+            echo "::error::DATAHUB_GMS_URL secret is required (HTTPS GMS; runners cannot see localhost)."
+            exit 1
+          fi
+
+      - name: Install Cascade
+        run: |
+          pip install "cascade-bot[writeback]==${{ inputs.cascade-version }}"
+
+      - name: Resolve PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "issue_comment" ]; then
+            N="${{ github.event.issue.number }}"
+            gh api "repos/${GITHUB_REPOSITORY}/pulls/${N}" | python3 -c '
+          import json, os, sys
+          p = json.load(sys.stdin)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              if str(p["head"]["ref"]).startswith("cascade/remediation/"):
+                  f.write("skip=true\n")
+              else:
+                  f.write("number=%s\n" % p["number"])
+                  f.write("base_sha=%s\n" % p["base"]["sha"])
+                  f.write("head_sha=%s\n" % p["head"]["sha"])
+          '
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "base_sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute PR diff
+        id: diff
+        if: steps.pr.outputs.skip != 'true'
+        run: |
+          mkdir -p artifacts/pr
+          BASE="${{ steps.pr.outputs.base_sha }}"
+          HEAD="${{ steps.pr.outputs.head_sha }}"
+          mapfile -t FILES < <(
+            git diff --name-only "${BASE}...${HEAD}" \
+              | grep -E '\.sql$|(^|/)models/|schema\.ya?ml$' || true
+          )
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+            echo "No SQL/model/schema changes; skipping."
+            : > artifacts/pr/pr.diff
+          else
+            echo "empty=false" >> "$GITHUB_OUTPUT"
+            git diff "${BASE}...${HEAD}" -- "${FILES[@]}" > artifacts/pr/pr.diff
+            wc -l artifacts/pr/pr.diff
+          fi
+
+      - name: Impact + generate (live)
+        if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.empty != 'true'
+        env:
+          DATAHUB_GMS_URL: ${{ secrets.DATAHUB_GMS_URL }}
+          DATAHUB_TOKEN: ${{ secrets.DATAHUB_TOKEN }}
+          CASCADE_MODE: ${{ vars.CASCADE_MODE }}
+          CASCADE_LLM_PROVIDER: ${{ vars.CASCADE_LLM_PROVIDER }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+          CASCADE_WRITEBACK: ${{ secrets.CASCADE_WRITEBACK }}
+        run: |
+          cascade impact \
+            --diff artifacts/pr/pr.diff \
+            --source live \
+            --generate \
+            --out artifacts/pr/generate \
+            > artifacts/pr/impact_stdout.json
+
+      - name: Apply (comment, or stacked PR on /cascade stack)
+        if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.empty != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CASCADE_PR_NUMBER: ${{ steps.pr.outputs.number }}
+          CASCADE_OPEN_DOWNSTREAM_PR: ${{ github.event_name == 'issue_comment' && '1' || '' }}
+          CASCADE_RUN_ID: pr-${{ steps.pr.outputs.number }}-${{ github.run_id }}
+          DATAHUB_GMS_URL: ${{ secrets.DATAHUB_GMS_URL }}
+          DATAHUB_TOKEN: ${{ secrets.DATAHUB_TOKEN }}
+          CASCADE_WRITEBACK: ${{ secrets.CASCADE_WRITEBACK }}
+        run: |
+          cascade apply \
+            --report artifacts/pr/generate/impact_report.json \
+            --out artifacts/pr/apply \
+            --mode apply \
+            --require-policy \
+            --pr-number "${{ steps.pr.outputs.number }}"
+
+      - name: Upload artifacts
+        if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.empty != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cascade-pr
+          path: artifacts/pr/

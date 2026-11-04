@@ -98,6 +98,10 @@ class TestFixtureMissing(unittest.TestCase):
 
 
 class TestDoctor(unittest.TestCase):
+    def setUp(self):
+        self.github_patch = mock.patch("cascade.setup_cmd._doctor_github")
+        self.github_patch.start()
+        self.addCleanup(self.github_patch.stop)
     def test_reports_missing_config(self):
         with tempfile.TemporaryDirectory() as td:
             lines, rc = run_doctor(Path(td))
@@ -135,6 +139,10 @@ class TestDoctor(unittest.TestCase):
 
 
 class TestSetup(unittest.TestCase):
+    def setUp(self):
+        self.github_patch = mock.patch("cascade.setup_cmd._doctor_github")
+        self.github_patch.start()
+        self.addCleanup(self.github_patch.stop)
     def test_rejects_non_git_dir(self):
         with tempfile.TemporaryDirectory() as td:
             lines, rc = run_setup(Path(td), demo=True, non_interactive=True)

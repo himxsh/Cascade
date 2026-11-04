@@ -153,6 +153,8 @@ cascade setup
 
 `setup` writes `.cascade/config.json`, `.env.example`, and `.github/workflows/cascade.yml`, probes DataHub if `DATAHUB_GMS_URL` is set, and tries to map SQL paths to catalog URNs. Pass `--demo` to skip live GMS (local/fixture path). `--non-interactive` fails instead of prompting. `--skip-secrets` skips GitHub Actions secrets.
 
+Installing the Cascade GitHub App commits a small `.github/workflows/cascade.yml` caller that runs Cascade’s reusable workflow. Add `LLM_API_KEY` and `DATAHUB_GMS_URL` as GitHub Actions secrets, and set `CASCADE_MODE` and `LLM_MODEL` as Actions variables. The key stays in your repository secrets.
+
 `cascade init` only writes the same files. `cascade doctor` is the check `setup` runs at the end.
 
 Copy `.env.example` → `.env` if you want a local file (never commit `.env`). Live PR comments still need DataHub.
@@ -264,6 +266,8 @@ A key in the environment does **not** turn LLM on. Mode must be `llm`.
 | `DATABASE_URL` / `SESSION_SECRET` / `GITHUB_OAUTH_*`       | Hosted dashboard only (not the CLI)          |
 | `CASCADE_DEV_LOGIN=1`                                      | Local dashboard test login (never production)|
 | `GITHUB_APP_ID` / `GITHUB_APP_SLUG` / `GITHUB_WEBHOOK_SECRET` | GitHub App (when registered)              |
+
+The GitHub App installation flow adds a caller workflow to the default branch (or opens a setup PR when direct pushes are blocked). Store `LLM_API_KEY` and `DATAHUB_GMS_URL` in Actions secrets and configure `CASCADE_MODE` and `LLM_MODEL` as repository variables; Cascade never receives the key.
 
 
 See `.env.example`. Actions secrets override `.env`. There are no warehouse credentials in this contract.
