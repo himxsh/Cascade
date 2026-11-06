@@ -48,27 +48,74 @@ function CheckGlyph() {
   )
 }
 
-export function InstallPanel() {
-  const [copied, setCopied] = useState(false)
+const PROMPT_PATH = '/install.md'
 
+function useCopied() {
+  const [copied, setCopied] = useState(false)
   useEffect(() => {
     if (!copied) return
     const id = window.setTimeout(() => setCopied(false), 1600)
     return () => window.clearTimeout(id)
   }, [copied])
+  return [copied, setCopied] as const
+}
 
-  const onCopy = async () => {
-    const ok = await copyText(PIP)
-    if (ok) setCopied(true)
+function CopyState({ copied }: { copied: boolean }) {
+  return (
+    <span
+      className={[
+        'flex shrink-0 items-center gap-1.5 text-[0.68rem] tracking-wide',
+        copied
+          ? 'text-ember'
+          : 'text-mute/80 transition-colors group-hover:text-frost',
+      ].join(' ')}
+      aria-live="polite"
+    >
+      {copied ? <CheckGlyph /> : <CopyGlyph />}
+      {copied ? 'Copied' : 'Copy'}
+    </span>
+  )
+}
+
+const ROW =
+  'group flex w-full items-center gap-3 rounded-lg border border-frost/[0.1] bg-ink px-3.5 py-2.5 text-left transition-colors hover:border-frost/20 hover:bg-void'
+
+export function InstallPanel() {
+  const [pipCopied, setPipCopied] = useCopied()
+  const [promptCopied, setPromptCopied] = useCopied()
+  const [prompt, setPrompt] = useState<string | null>(null)
+
+  // Fetched up front so the copy runs inside the click (Safari drops
+  // clipboard writes that happen after an await on the network).
+  useEffect(() => {
+    let live = true
+    fetch(PROMPT_PATH)
+      .then((r) => (r.ok ? r.text() : null))
+      .then((t) => live && setPrompt(t))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+
+  const onCopyPip = async () => {
+    if (await copyText(PIP)) setPipCopied(true)
+  }
+
+  const onCopyPrompt = async () => {
+    const text =
+      prompt ??
+      `Install Cascade in this repository by following ${window.location.origin}${PROMPT_PATH}`
+    if (await copyText(text)) setPromptCopied(true)
   }
 
   return (
-    <div className="mx-auto w-full max-w-[22.5rem]">
+    <div className="mx-auto w-full max-w-[22.5rem] space-y-2.5">
       <button
         type="button"
-        className="group flex w-full items-center gap-3 rounded-lg border border-frost/[0.1] bg-ink px-3.5 py-2.5 text-left transition-colors hover:border-frost/20 hover:bg-void"
-        onClick={() => void onCopy()}
-        aria-label={copied ? 'Copied install command' : 'Copy install command'}
+        className={ROW}
+        onClick={() => void onCopyPip()}
+        aria-label={pipCopied ? 'Copied install command' : 'Copy install command'}
       >
         <span className="cmd select-none text-ember/80" aria-hidden="true">
           $
@@ -76,19 +123,37 @@ export function InstallPanel() {
         <code className="cmd min-w-0 flex-1 whitespace-pre-wrap break-all text-[0.8125rem] leading-relaxed text-frost">
           {PIP}
         </code>
-        <span
-          className={[
-            'flex shrink-0 items-center gap-1.5 text-[0.68rem] tracking-wide',
-            copied
-              ? 'text-ember'
-              : 'text-mute/80 transition-colors group-hover:text-frost',
-          ].join(' ')}
-          aria-live="polite"
-        >
-          {copied ? <CheckGlyph /> : <CopyGlyph />}
-          {copied ? 'Copied' : 'Copy'}
-        </span>
+        <CopyState copied={pipCopied} />
       </button>
+
+      <button
+        type="button"
+        className={ROW}
+        onClick={() => void onCopyPrompt()}
+        aria-label={
+          promptCopied ? 'Copied AI agent install prompt' : 'Copy AI agent install prompt'
+        }
+      >
+        <span className="cmd select-none text-ember/80" aria-hidden="true">
+          &gt;
+        </span>
+        <span className="min-w-0 flex-1 text-[0.8125rem] leading-relaxed text-frost">
+          Install with an AI agent
+        </span>
+        <CopyState copied={promptCopied} />
+      </button>
+
+      <p className="px-1 text-center text-[0.72rem] leading-relaxed text-mute/80">
+        Paste the prompt into Claude Code, Cursor, or Codex in your repo.{' '}
+        <a
+          href={PROMPT_PATH}
+          target="_blank"
+          rel="noreferrer"
+          className="text-frost/80 underline decoration-ember/60 underline-offset-4 hover:text-frost"
+        >
+          Read it first
+        </a>
+      </p>
     </div>
   )
 }
