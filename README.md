@@ -1,6 +1,6 @@
 # Cascade
 
-**A breaking schema PR becomes a coordinated migration.** Cascade reads [DataHub](https://datahubproject.io/) lineage, rewrites the downstream SQL, opens a remediation pull request, and writes the decision trail back to the graph.
+**A breaking schema PR becomes a coordinated migration.** Cascade reads [DataHub](https://datahubproject.io/) lineage, comments on the schema PR with everything downstream it breaks, and, when you ask, opens a stacked pull request with the downstream SQL rewritten.
 
 It does not connect to your warehouse. It does not merge without a human. It coordinates the work that usually lives in Slack threads and stale tickets.
 
@@ -8,6 +8,8 @@ It does not connect to your warehouse. It does not merge without a human. It coo
 pip install cascade-bot
 cascade setup
 ```
+
+Or let your AI agent do it: copy the **Install with an AI agent** prompt from the website, or point Claude Code, Cursor, or Codex at [`frontend/public/install.md`](frontend/public/install.md).
 
 Python 3.11+ · Apache-2.0 · GitHub Actions · DataHub Cloud or self-hosted GMS · SQL / dbt
 
@@ -87,6 +89,16 @@ Warehouses (Snowflake, Postgres, BigQuery, …) work insofar as DataHub already 
 
 ## Install
 
+There are three ways to install Cascade in a repo. All of them end with a `.github/workflows/cascade.yml` on your default branch.
+
+| Path | What you do | What it does for you |
+| ---- | ----------- | -------------------- |
+| **AI agent** | Paste the prompt from the website's **Install with an AI agent** button (source: [`frontend/public/install.md`](frontend/public/install.md)) into Claude Code, Cursor, Codex, or any agent that can run commands | Runs setup on a branch, asks you to map tables it can't match, has you run `gh secret set` yourself so keys never reach the chat, runs `cascade doctor`, opens a PR |
+| **CLI** | `pip install cascade-bot` then `cascade setup` | Writes the config, `.env.example`, and workflow, maps SQL files to DataHub URNs, optionally sets Actions secrets |
+| **GitHub App** | Sign in on the website and install the Cascade App | Commits the workflow, or opens a `cascade/setup` PR on protected branches. You still add secrets and `.cascade/config.json` |
+
+The agent prompt tells the user the parts people get surprised by: the files have to be committed and merged, `/cascade stack` only works once the workflow is on the default branch, and the repo has to allow Actions to open pull requests.
+
 ```bash
 pip install cascade-bot
 cascade setup
@@ -153,11 +165,11 @@ cascade setup
 
 `setup` writes `.cascade/config.json`, `.env.example`, and `.github/workflows/cascade.yml`, probes DataHub if `DATAHUB_GMS_URL` is set, and tries to map SQL paths to catalog URNs. Pass `--demo` to skip live GMS (local/fixture path). `--non-interactive` fails instead of prompting. `--skip-secrets` skips GitHub Actions secrets.
 
-Installing the Cascade GitHub App commits a small `.github/workflows/cascade.yml` caller that runs Cascade’s reusable workflow. Add `LLM_API_KEY` and `DATAHUB_GMS_URL` as GitHub Actions secrets, and set `CASCADE_MODE` and `LLM_MODEL` as Actions variables. The key stays in your repository secrets.
+The workflow `setup` writes is a small caller of Cascade's reusable workflow ([`run.yml`](.github/workflows/run.yml)), pinned to the release tag. Installing the Cascade GitHub App commits the same file but does **not** write `.cascade/config.json`; run `cascade setup` (or the agent prompt) for that. Add `DATAHUB_GMS_URL` (and `DATAHUB_TOKEN` if needed) as Actions secrets. For rewrites, add the secret `LLM_API_KEY` and the variables `CASCADE_MODE=llm` and `LLM_MODEL`. Keys stay in your repository secrets.
 
 `cascade init` only writes the same files. `cascade doctor` is the check `setup` runs at the end.
 
-Copy `.env.example` → `.env` if you want a local file (never commit `.env`). Live PR comments still need DataHub.
+Copy `.env.example` → `.env` if you want a local file (never commit `.env`; `setup` adds it to `.gitignore`). Commit the other files and merge them into the default branch. Live PR comments still need DataHub.
 
 ### Map paths to URNs
 
@@ -182,7 +194,7 @@ Copy `.env.example` → `.env` if you want a local file (never commit `.env`). L
 
 Longest matching path prefix wins. Override with `--urn` or `CASCADE_SOURCE_URN`. Nested files can be pinned in `urn_files`.
 
-Copy-paste Action (fail-closed, live GMS only): `[examples/github-action/](examples/github-action/)`.
+Copy-paste Action: [`examples/github-action/`](examples/github-action/).
 
 ### GitHub Action
 
@@ -194,18 +206,26 @@ flowchart TD
   Diff --> Impact["cascade impact --source live --generate"]
   Impact --> Apply["cascade apply --mode apply"]
   Apply --> Comment[Idempotent comment on the source PR]
-  Apply --> Branch["Open or update cascade/remediation/N"]
+  Comment --> Stack["/cascade stack comment"]
+  Stack --> Branch["Open or update cascade/remediation/N"]
   Branch --> Review[Human review and merge]
   Review --> Migrated[Optional: mark cascade:migrated]
 ```
 
 
 
-Required secret: `DATAHUB_GMS_URL` (HTTPS — Actions cannot see `localhost`). Optional: `DATAHUB_TOKEN`, `LLM_API_KEY`, `CASCADE_WRITEBACK`.
+Required secret: `DATAHUB_GMS_URL` (HTTPS — Actions cannot see `localhost`). Optional secrets: `DATAHUB_TOKEN`, `LLM_API_KEY`, `CASCADE_WRITEBACK`. Variables: `CASCADE_MODE`, `LLM_MODEL`, and for non-OpenAI providers `CASCADE_LLM_PROVIDER` and `LLM_BASE_URL`.
+
+Before you rely on it:
+
+- `/cascade stack` runs on `issue_comment`, which GitHub only runs from the **default branch**. Merge the workflow first.
+- Stacked PRs are opened with `GITHUB_TOKEN`, so enable **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests**.
+- If your org restricts actions, allow `himxsh/Cascade` (the caller uses its reusable workflow).
+- The job has `contents: write` and `pull-requests: write`. It comments, and pushes `cascade/remediation/*` only after `/cascade stack`. It never merges.
 
 This repo’s own workflows also keep an offline **fixture-ci** job. Consumer templates do not: they fail if GMS is missing.
 
-On merge of `cascade/remediation/*`, `[.github/workflows/cascade-migrated.yml](.github/workflows/cascade-migrated.yml)` can call `mark_migrated`.
+On merge of `cascade/remediation/*`, [`.github/workflows/cascade-migrated.yml`](.github/workflows/cascade-migrated.yml) can call `mark_migrated`.
 
 ## CLI
 
@@ -246,7 +266,7 @@ Live mode hydrates datasets, lineage, and owners from GMS GraphQL. Consumer CI s
 | `llm`           | One call edits all affected SQL models, macros, and `schema.yml` files. Requires `LLM_API_KEY` (or `OPENAI_API_KEY`) and `LLM_MODEL`. There is no fallback; on failure Cascade posts the report only. Tested with Claude Sonnet 5.5 at medium effort. |
 
 
-Providers (`CASCADE_LLM_PROVIDER`): `openai`, `anthropic`, `azure-openai`, `bedrock`, `ollama`, `custom` (`custom` requires `LLM_BASE_URL`).
+Providers (`CASCADE_LLM_PROVIDER`): `openai` (default), `anthropic`, `azure-openai`, `bedrock`, `ollama`, `custom`. `anthropic`, `azure-openai`, `bedrock`, and `custom` require `LLM_BASE_URL`. `ollama` defaults to `localhost`, which Actions runners cannot reach.
 
 A key in the environment does **not** turn LLM on. Mode must be `llm`.
 

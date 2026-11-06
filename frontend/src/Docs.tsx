@@ -24,6 +24,7 @@ const NAV: { id: DocId; label: string }[] = [
   { id: 'install', label: 'Install' },
   { id: 'configure', label: 'Configure' },
   { id: 'action', label: 'GitHub Action' },
+  { id: 'github-app', label: 'GitHub App' },
   { id: 'rewrite', label: 'How it edits' },
   { id: 'providers', label: 'AI models' },
   { id: 'datahub', label: 'DataHub' },
@@ -45,8 +46,34 @@ function H({ children }: { children: ReactNode }) {
   return <h1 className="display text-[clamp(2rem,4vw,2.75rem)]">{children}</h1>
 }
 
+function H2({ children }: { children: ReactNode }) {
+  return <h2 className="mt-10 text-xl font-semibold">{children}</h2>
+}
+
 function P({ children }: { children: ReactNode }) {
   return <p className="mt-4 max-w-[65ch] text-mute">{children}</p>
+}
+
+const LINK = 'text-frost underline decoration-ember/70 underline-offset-4'
+
+function A({ href, children }: { href: string; children: ReactNode }) {
+  // Static files (like /install.md) are not SPA routes, so skip client-side nav.
+  if (href.endsWith('.md')) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" className={LINK}>
+        {children}
+      </a>
+    )
+  }
+  return (
+    <Link href={href} className={LINK}>
+      {children}
+    </Link>
+  )
+}
+
+function C({ children }: { children: ReactNode }) {
+  return <code className="cmd text-[0.9em] text-frost">{children}</code>
 }
 
 function DocBody({ id }: { id: DocId }) {
@@ -56,75 +83,121 @@ function DocBody({ id }: { id: DocId }) {
         <>
           <H>Get Cascade running</H>
           <P>
-            You need SQL files in a GitHub repo, and those tables already listed
-            in DataHub. Cascade does not copy tables out of your database.
+            You need SQL or dbt files in a GitHub repo, and those tables already
+            in DataHub with their downstream lineage. Cascade reads DataHub. It
+            never connects to your warehouse.
           </P>
+          <P>There are three ways to install it. Pick one.</P>
           <ol className="mt-8 space-y-6">
             <li>
-              <p className="font-semibold">Install it</p>
+              <p className="font-semibold">Let your AI agent do it</p>
               <P>
-                Python 3.11 or newer. The install command lives on the{' '}
-                <Link
-                  href="/docs/install"
-                  className="text-frost underline decoration-ember/70 underline-offset-4"
-                >
-                  Install
-                </Link>{' '}
-                page.
+                On the home page, copy the &ldquo;Install with an AI agent&rdquo;
+                prompt and paste it into Claude Code, Cursor, or Codex in your
+                repo. The agent runs setup, asks you about anything it can&apos;t
+                work out, has you set secrets yourself, and opens a PR.{' '}
+                <A href="/install.md">Read the prompt</A>.
               </P>
             </li>
             <li>
-              <p className="font-semibold">Create the config files</p>
-              <GhCode file="terminal">cascade setup</GhCode>
+              <p className="font-semibold">Use the CLI</p>
+              <GhCode file="terminal">{`${PIP}
+cascade setup`}</GhCode>
               <P>
-                This adds a config file, an example secrets file, and a GitHub
-                workflow. It can probe DataHub and set Actions secrets. Use
-                --demo if you do not have DataHub yet. It will not write a real
-                .env with passwords.
+                Setup writes three files, maps your SQL files to DataHub tables,
+                and can set GitHub Actions secrets with the gh CLI. Commit the
+                files and merge them. See <A href="/docs/install">Install</A>.
               </P>
             </li>
             <li>
-              <p className="font-semibold">Point it at your tables</p>
+              <p className="font-semibold">Install the GitHub App</p>
               <P>
-                Open .cascade/config.json. Point your models folder at the table
-                DataHub already knows. The long urn string is DataHub's name for
-                that table.
-              </P>
-            </li>
-            <li>
-              <p className="font-semibold">Try it on your laptop first</p>
-              <GhCode file="terminal">{`cascade impact --diff path/to.sql.diff --source live --generate --out artifacts/run
-cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}</GhCode>
-              <P>
-                This only writes files on your laptop. The GitHub Action is what
-                comments. Comment /cascade stack to open a stacked PR.
+                Sign in, install the Cascade App on a repo, and it adds the
+                workflow for you. You still add the secrets and the config
+                file. See <A href="/docs/github-app">GitHub App</A>.
               </P>
             </li>
           </ol>
+          <H2>Then try it</H2>
+          <P>
+            Once the workflow is on your default branch, open a PR that renames
+            a column in a mapped model. Cascade comments with the downstream
+            impact. Comment <C>/cascade stack</C> on that PR to get the
+            downstream fixes as a stacked PR.
+          </P>
+          <P>To try it locally first, without GitHub:</P>
+          <GhCode file="terminal">{`cascade impact --diff path/to.sql.diff --source live --generate --out artifacts/run
+cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}</GhCode>
+          <P>That only writes files under artifacts/. Nothing is posted.</P>
         </>
       )
     case 'install':
       return (
         <>
           <H>Install</H>
+          <H2>With an AI agent</H2>
           <P>
-            Cascade is a Python CLI. You need Python 3.11 or newer.
+            The home page has an &ldquo;Install with an AI agent&rdquo; button.
+            It copies a prompt for Claude Code, Cursor, Codex, or any agent that
+            can run commands in your repo. The agent:
           </P>
-          <GhCode file="terminal">{PIP}</GhCode>
+          <ul className="mt-4 max-w-[65ch] list-disc space-y-2 pl-5 text-mute">
+            <li>explains what will change before it changes anything,</li>
+            <li>installs the CLI and runs cascade setup on a new branch,</li>
+            <li>asks you which DataHub table each unmapped file is,</li>
+            <li>
+              has you run gh secret set yourself, so keys never reach the chat,
+            </li>
+            <li>runs cascade doctor, then opens a PR for you to review.</li>
+          </ul>
           <P>
-            That installs cascade-bot from PyPI (latest published release; the
-            current one is {VERSION}). Then run cascade setup in your repo. That
-            writes the config, an example secrets file, and the GitHub workflow.
-            In GitHub Actions, pin a version. Do not install from main.
+            You can point an agent at the prompt directly too: &ldquo;Follow{' '}
+            <A href="/install.md">/install.md</A> on this site to install
+            Cascade.&rdquo;
+          </P>
+
+          <H2>With the CLI</H2>
+          <P>You need Python 3.11 or newer.</P>
+          <GhCode file="terminal">{`${PIP}
+cascade setup`}</GhCode>
+          <P>
+            That installs cascade-bot {VERSION} from PyPI. Run setup from inside
+            your repo. It writes .cascade/config.json, .env.example, and
+            .github/workflows/cascade.yml, and adds .env to .gitignore.
           </P>
           <P>
-            Only add writeback if you want Cascade to leave a note on the table
-            in DataHub.
+            If DATAHUB_GMS_URL is set, setup checks DataHub and maps your SQL
+            files to tables. If the gh CLI is signed in, it can also set your
+            Actions secrets. Useful flags:
+          </P>
+          <ul className="mt-4 max-w-[65ch] list-disc space-y-2 pl-5 text-mute">
+            <li>
+              <C>--demo</C> skips DataHub and uses the sample catalog.
+            </li>
+            <li>
+              <C>--non-interactive</C> fails instead of prompting (CI, scripts,
+              agents).
+            </li>
+            <li>
+              <C>--skip-secrets</C> leaves GitHub secrets alone.
+            </li>
+          </ul>
+          <P>
+            Commit the three files and merge them into your default branch.
+            Cascade does not run until the workflow is there.
+          </P>
+          <P>
+            The pip extra [writeback] is only needed if you want Cascade to tag
+            tables in DataHub.
+          </P>
+
+          <H2>With the GitHub App</H2>
+          <P>
+            The App adds the workflow for you. See{' '}
+            <A href="/docs/github-app">GitHub App</A>.
           </P>
           <p className="mt-6">
-            <Link href={GITHUB} className="text-frost underline decoration-ember/70 underline-offset-4">
-              Source on GitHub
-            </Link>
+            <A href={GITHUB}>Source on GitHub</A>
           </p>
         </>
       )
@@ -133,8 +206,8 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>Configure</H>
           <P>
-            .cascade/config.json tells Cascade which folder in git matches which
-            table in DataHub. The urn field is DataHub's name for that table. It
+            .cascade/config.json tells Cascade which files in git belong to
+            which table in DataHub. A urn is DataHub&apos;s ID for a table. It
             never asks for a database password.
           </P>
           <GhCode file=".cascade/config.json">{`{
@@ -145,11 +218,18 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
       "path": "models/",
       "urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,db.public.orders,PROD)"
     }
-  ]
+  ],
+  "urn_files": {},
+  "rewrite": { "mode": "off", "provider": "openai", "model": "" }
 }`}</GhCode>
           <P>
-            If one file is a different table, list it under urn_files. Values in
-            the environment override this file when both are set.
+            The longest matching path wins. Pin a single file under urn_files.
+            Remove any entry still containing YOUR_DB or YOUR_TABLE: a wrong
+            urn means Cascade stays quiet on PRs it should comment on.
+          </P>
+          <P>
+            Environment variables and Actions variables override this file. For
+            example, CASCADE_MODE wins over rewrite.mode.
           </P>
         </>
       )
@@ -158,21 +238,16 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>Self-hosting</H>
           <P>
-            Keys for DataHub and optional AI rewrites stay in your repo .env and
-            in GitHub Actions secrets. Cascade does not host them.
+            Keys for DataHub and AI rewrites stay in your repo&apos;s GitHub
+            Actions secrets, or a local .env that is never committed. Cascade
+            does not host them.
           </P>
           <P>
-            Operator setup for the optional hosted dashboard (database URL,
-            session signing, GitHub OAuth, GitHub App) lives in the repository
-            contributing guide, not on this marketing site.
+            Setup for the optional hosted dashboard (database URL, session
+            signing, GitHub OAuth, GitHub App) is in the contributing guide.
           </P>
           <p className="mt-6">
-            <Link
-              href={CONTRIBUTING}
-              className="text-frost underline decoration-ember/70 underline-offset-4"
-            >
-              Contributing guide
-            </Link>
+            <A href={CONTRIBUTING}>Contributing guide</A>
           </p>
         </>
       )
@@ -181,17 +256,45 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>GitHub App</H>
           <P>
-            A GitHub App can be connected later so this site can track which
-            repositories you enable. Credentials stay on the server, never in
-            the browser.
+            The App installs the workflow for you. Sign in on this site, open
+            the dashboard, and choose Install Cascade App. GitHub asks which
+            repos to give it.
           </P>
+          <P>For each repo, the App then:</P>
+          <ul className="mt-4 max-w-[65ch] list-disc space-y-2 pl-5 text-mute">
+            <li>
+              commits .github/workflows/cascade.yml to the default branch, or
+            </li>
+            <li>
+              opens a cascade/setup PR when the branch is protected. Merge it
+              to turn Cascade on.
+            </li>
+          </ul>
           <P>
-            Today, comments on pull requests come from the GitHub Action you
-            add to the repo. That path does not need this dashboard.
+            The App only adds the workflow. You still need to:
+          </P>
+          <ul className="mt-4 max-w-[65ch] list-disc space-y-2 pl-5 text-mute">
+            <li>
+              add the Actions secret DATAHUB_GMS_URL (and DATAHUB_TOKEN if your
+              DataHub needs one),
+            </li>
+            <li>
+              for AI fixes, add the secret LLM_API_KEY and the variables
+              CASCADE_MODE=llm and LLM_MODEL,
+            </li>
+            <li>
+              commit a .cascade/config.json. Run cascade setup or the AI agent
+              prompt to make one.
+            </li>
+          </ul>
+          <P>
+            The dashboard links straight to each of those GitHub settings pages
+            after you install. Your keys stay in your repository&apos;s secrets.
+            This site never receives them.
           </P>
           <p className="mt-6">
-            <Link href="/docs/action" className="btn btn-ghost">
-              GitHub Action
+            <Link href="/app" className="btn btn-ember">
+              Open the dashboard
             </Link>
           </p>
         </>
@@ -201,23 +304,55 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>GitHub Action</H>
           <P>
-            Add the workflow to .github/workflows. It runs when a pull request
-            changes SQL files. It comments first. Comment /cascade stack to
-            open a stacked PR. It skips Cascade's own stacked branches. It
-            stops if DataHub is missing.
+            .github/workflows/cascade.yml is a short file that calls
+            Cascade&apos;s reusable workflow, pinned to a release (v{VERSION}).
+            cascade setup and the GitHub App both write it, or you can download
+            it below.
           </P>
           <P>
-            The workflow needs permission to write files and to comment on pull
-            requests. It will not merge.
+            It runs when a pull request changes .sql files, models/, or
+            schema.yml. It comments on that PR with what is affected
+            downstream. Re-runs edit the same comment. It skips Cascade&apos;s
+            own stacked branches, and fails if DataHub is missing.
           </P>
           <P>
-            Required secrets: DATAHUB_GMS_URL, DATAHUB_TOKEN. Optional:
-            LLM_API_KEY. Pin the install to a version, not main.
+            Commenting <C>/cascade stack</C> opens a stacked PR with the
+            rewritten SQL. Only the PR author and repo collaborators can
+            trigger it.
           </P>
-          <P>
-            cascade setup writes the workflow file. You can also download it.
-          </P>
-          <p className="mt-6">
+          <H2>Secrets and variables</H2>
+          <ul className="mt-4 max-w-[65ch] list-disc space-y-2 pl-5 text-mute">
+            <li>
+              Required secret: DATAHUB_GMS_URL. Use HTTPS: runners cannot reach
+              localhost.
+            </li>
+            <li>Optional secrets: DATAHUB_TOKEN, CASCADE_WRITEBACK.</li>
+            <li>
+              For AI fixes: secret LLM_API_KEY, and variables CASCADE_MODE=llm
+              and LLM_MODEL. Add CASCADE_LLM_PROVIDER and LLM_BASE_URL for
+              providers other than OpenAI.
+            </li>
+          </ul>
+          <H2>Things to know</H2>
+          <ul className="mt-4 max-w-[65ch] list-disc space-y-2 pl-5 text-mute">
+            <li>
+              The workflow can write contents and pull requests. It needs that
+              to comment and to push the stacked branch. It never merges.
+            </li>
+            <li>
+              /cascade stack only works once the workflow is on the default
+              branch. GitHub runs comment-triggered workflows from there.
+            </li>
+            <li>
+              For stacked PRs, turn on &ldquo;Allow GitHub Actions to create
+              and approve pull requests&rdquo; under Settings → Actions →
+              General.
+            </li>
+            <li>
+              If your org limits which actions can run, allow himxsh/Cascade.
+            </li>
+          </ul>
+          <p className="mt-8">
             <Link href="/cascade.yml" download="cascade.yml" className="btn btn-ember">
               Download workflow
             </Link>
@@ -229,16 +364,28 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>How it edits files</H>
           <P>
-            Two modes: simple rename, or an AI rewrite. Set CASCADE_MODE, or
-            pass --rewrite on the command.
+            Two modes, set with CASCADE_MODE (or rewrite.mode in the config,
+            or --rewrite on the command line).
+          </P>
+          <ul className="mt-4 max-w-[65ch] list-disc space-y-2 pl-5 text-mute">
+            <li>
+              <span className="font-semibold text-frost">off</span> is the
+              default. Cascade reports what is affected and edits nothing.
+            </li>
+            <li>
+              <span className="font-semibold text-frost">llm</span> makes one AI
+              call that edits every affected SQL model, macro, and schema.yml
+              together. It needs LLM_API_KEY and LLM_MODEL.
+            </li>
+          </ul>
+          <P>
+            There is no fallback. If the AI call fails or times out, Cascade
+            posts the report without fixes. An API key alone does not turn AI
+            on: the mode must be llm.
           </P>
           <P>
-            Simple rename is the default. It swaps the old column name for the
-            new one, then checks the name still exists in DataHub. No AI call.
-          </P>
-          <P>
-            AI rewrite can handle messier SQL. It still cannot invent column
-            names. If the AI times out, Cascade falls back to the simple rename.
+            In llm mode, the affected SQL is sent to the provider you chose, on
+            your key.
           </P>
         </>
       )
@@ -247,9 +394,14 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>AI models</H>
           <P>
-            If you turn on AI edits, pick a provider: openai, anthropic,
-            azure-openai, bedrock, ollama, or custom. You must set LLM_MODEL.
-            custom also needs LLM_BASE_URL.
+            Set CASCADE_LLM_PROVIDER to openai (the default), anthropic,
+            azure-openai, bedrock, ollama, or custom. LLM_MODEL is always
+            required.
+          </P>
+          <P>
+            anthropic, azure-openai, bedrock, and custom also need LLM_BASE_URL.
+            ollama defaults to localhost, which GitHub runners cannot reach, so
+            set LLM_BASE_URL for CI too.
           </P>
           <P>Cascade talks HTTP. It does not install a separate SDK per vendor.</P>
         </>
@@ -259,15 +411,17 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
         <>
           <H>DataHub</H>
           <P>
-            Set DATAHUB_GMS_URL to your DataHub site. That is the env name
-            DataHub uses. GitHub runners cannot see localhost, so use HTTPS. The
-            token needs read access. Write access is only needed if you ask
-            Cascade to leave a note on the table.
+            Set DATAHUB_GMS_URL to your DataHub GMS URL. GitHub runners cannot
+            see localhost, so use HTTPS. The token needs read access. Write
+            access is only needed if you ask Cascade to tag tables
+            (CASCADE_WRITEBACK).
           </P>
           <P>
             DataHub has to already know your tables and what depends on them.
-            Run cascade doctor if you are not sure the URL is reachable.
+            With column-level lineage, Cascade narrows impact to the columns
+            that changed. Without it, it falls back to table-level lineage.
           </P>
+          <P>Run cascade doctor to check that DataHub is reachable.</P>
         </>
       )
     case 'cli':
@@ -278,8 +432,8 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
           <ul className="mt-6 max-w-[65ch] space-y-3 text-mute">
             <li>
               <span className="font-semibold text-frost">setup</span> is
-              first-time setup: config, workflow, DataHub probe, optional
-              GitHub secrets. --demo skips live DataHub.
+              first-time setup: files, DataHub check, table mapping, optional
+              GitHub secrets. Flags: --demo, --non-interactive, --skip-secrets.
             </li>
             <li>
               <span className="font-semibold text-frost">init</span> only writes
@@ -287,29 +441,30 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
             </li>
             <li>
               <span className="font-semibold text-frost">doctor</span> checks
-              Python, config, DataHub, and (if needed) the AI endpoint.
+              Python, config, table mapping, DataHub, AI settings, and (with gh)
+              which Actions secrets and variables are set.
             </li>
             <li>
               <span className="font-semibold text-frost">impact</span> lists
-              which files still use the old column. Add --generate to edit them
-              in the same run.
+              what is affected downstream. Add --generate to write fixes in the
+              same run.
             </li>
             <li>
-              <span className="font-semibold text-frost">generate</span> edits
-              files from a report you already have.
+              <span className="font-semibold text-frost">generate</span> writes
+              fixes from a report you already have.
             </li>
             <li>
-              <span className="font-semibold text-frost">apply</span> comments on
-              the original pull request. A stacked PR opens only if someone
-              comments /cascade stack. By default it only writes local files.
+              <span className="font-semibold text-frost">apply</span> writes the
+              PR comment and patch locally. With --mode apply and secrets set, it
+              posts the comment, and opens the stacked PR after /cascade stack.
             </li>
             <li>
               <span className="font-semibold text-frost">policy</span> fails the
-              GitHub check if a stacked PR was requested but did not open.
+              check if a stacked PR was requested but did not open.
             </li>
             <li>
-              <span className="font-semibold text-frost">demo</span> is for
-              Cascade developers. You do not need it to install.
+              <span className="font-semibold text-frost">demo</span> runs the
+              whole loop offline against a sample catalog.
             </li>
           </ul>
         </>
@@ -318,30 +473,37 @@ cascade apply --report artifacts/run/impact_report.json --out artifacts/apply`}<
       return (
         <>
           <H>FAQ</H>
-          <h2 className="mt-8 text-xl font-semibold">Does this work with my database?</h2>
+          <H2>Does this work with my database?</H2>
           <P>
             If DataHub already knows that database, yes. Cascade never logs into
             Snowflake or BigQuery. It reads DataHub and edits SQL in git.
           </P>
-          <h2 className="mt-8 text-xl font-semibold">DataHub will not connect</h2>
+          <H2>DataHub will not connect</H2>
           <P>
             Use an https URL that GitHub Actions can reach, not localhost. Run
             cascade doctor to test it.
           </P>
-          <h2 className="mt-8 text-xl font-semibold">It cannot find the table</h2>
+          <H2>Cascade did not comment on my PR</H2>
           <P>
-            The changed file path must match a folder in .cascade/config.json.
-            Or pass --urn. That flag is DataHub's name for the table.
+            Check that the workflow is merged into the default branch, the PR
+            changes a file Cascade watches, and the file maps to a real urn in
+            .cascade/config.json. The Actions tab shows the run log.
           </P>
-          <h2 className="mt-8 text-xl font-semibold">The AI timed out</h2>
+          <H2>/cascade stack does nothing</H2>
           <P>
-            Cascade falls back to the simple rename. Set CASCADE_MODE=deterministic
-            if you do not want AI at all.
+            The workflow must be on the default branch, the comment must come
+            from the PR author or a collaborator, and &ldquo;Allow GitHub
+            Actions to create and approve pull requests&rdquo; must be on.
           </P>
-          <h2 className="mt-8 text-xl font-semibold">Do I need an account?</h2>
+          <H2>The AI call failed</H2>
           <P>
-            No. Install the CLI and add the GitHub Action to your repo. Sign-in
-            on this site is optional.
+            Cascade posts the report without fixes. Check LLM_API_KEY,
+            LLM_MODEL, and LLM_BASE_URL. Set CASCADE_MODE=off for report only.
+          </P>
+          <H2>Do I need an account?</H2>
+          <P>
+            No. The CLI and the AI agent prompt work without one. Sign-in is
+            only for the GitHub App.
           </P>
         </>
       )
